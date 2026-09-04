@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/privacy_finding.dart';
+import '../theme/app_theme.dart';
 
 /// Draws a box around each finding.
 ///
@@ -28,12 +29,19 @@ class DetectionOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _FindingBoxPainter(
-        findings: findings,
-        imageSize: imageSize,
-        scheme: Theme.of(context).colorScheme,
-        debugTextBounds: debugTextBounds,
+    final scheme = Theme.of(context).colorScheme;
+
+    // RepaintBoundary stops the box layer from repainting the photo
+    // underneath it every time a switch is toggled.
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _FindingBoxPainter(
+          findings: findings,
+          imageSize: imageSize,
+          scheme: scheme,
+          riskColor: context.semantics.risk,
+          debugTextBounds: debugTextBounds,
+        ),
       ),
     );
   }
@@ -44,12 +52,14 @@ class _FindingBoxPainter extends CustomPainter {
     required this.findings,
     required this.imageSize,
     required this.scheme,
+    required this.riskColor,
     required this.debugTextBounds,
   });
 
   final List<PrivacyFinding> findings;
   final Size imageSize;
   final ColorScheme scheme;
+  final Color riskColor;
   final List<Rect> debugTextBounds;
 
   Color _colorFor(FindingType type) => switch (type) {
@@ -57,7 +67,7 @@ class _FindingBoxPainter extends CustomPainter {
     FindingType.qrCode => scheme.tertiary,
     FindingType.manual => scheme.secondary,
     // Every text-derived risk shares the alarm colour.
-    _ => scheme.error,
+    _ => riskColor,
   };
 
   @override
@@ -91,15 +101,28 @@ class _FindingBoxPainter extends CustomPainter {
     for (final finding in findings) {
       final rect = toScreen(finding.bounds);
       final color = _colorFor(finding.type);
+      final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
 
-      canvas.drawRect(rect, Paint()..color = color.withValues(alpha: 0.18));
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..color = color,
-      );
+      if (finding.selected) {
+        canvas.drawRRect(rrect, Paint()..color = color.withValues(alpha: 0.20));
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3
+            ..color = color,
+        );
+      } else {
+        // Kept, not hidden. Still drawn, so the user can see what the
+        // scan found and change their mind - but visibly de-emphasised.
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..color = color.withValues(alpha: 0.45),
+        );
+      }
     }
   }
 
@@ -108,6 +131,7 @@ class _FindingBoxPainter extends CustomPainter {
     return oldDelegate.findings != findings ||
         oldDelegate.imageSize != imageSize ||
         oldDelegate.scheme != scheme ||
+        oldDelegate.riskColor != riskColor ||
         oldDelegate.debugTextBounds != debugTextBounds;
   }
 }

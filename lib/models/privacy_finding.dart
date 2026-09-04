@@ -40,8 +40,8 @@ class PrivacyFinding {
     this.detail,
     this.selected = true,
     RedactionMethod? redaction,
-  })  : type = type,
-        redaction = redaction ?? type.defaultRedaction;
+  }) : type = type,
+       redaction = redaction ?? type.defaultRedaction;
 
   final String id;
   final FindingType type;

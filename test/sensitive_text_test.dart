@@ -79,7 +79,10 @@ void main() {
 
     test('a long digit run that fails Luhn is not a card', () {
       final matches = findSensitive('Order 1234 5678 9012 3456');
-      expect(matches.map((m) => m.type), isNot(contains(FindingType.cardNumber)));
+      expect(
+        matches.map((m) => m.type),
+        isNot(contains(FindingType.cardNumber)),
+      );
     });
 
     test('ordinary text produces nothing', () {

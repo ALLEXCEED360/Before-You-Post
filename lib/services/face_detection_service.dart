@@ -10,16 +10,16 @@ import '../models/privacy_finding.dart';
 /// swapped independently (outline section 5).
 class FaceDetectionService {
   FaceDetectionService()
-      : _detector = FaceDetector(
-          options: FaceDetectorOptions(
-            // 'accurate' is slower but we are analysing one still image,
-            // not a 30fps camera stream, so correctness wins.
-            performanceMode: FaceDetectorMode.accurate,
-            // Faces smaller than 5% of the image width are still worth
-            // flagging - a face in the background is still a face.
-            minFaceSize: 0.05,
-          ),
-        );
+    : _detector = FaceDetector(
+        options: FaceDetectorOptions(
+          // 'accurate' is slower but we are analysing one still image,
+          // not a 30fps camera stream, so correctness wins.
+          performanceMode: FaceDetectorMode.accurate,
+          // Faces smaller than 5% of the image width are still worth
+          // flagging - a face in the background is still a face.
+          minFaceSize: 0.05,
+        ),
+      );
 
   final FaceDetector _detector;
 
