@@ -13,6 +13,7 @@ class DetectionOverlay extends StatelessWidget {
     super.key,
     required this.findings,
     required this.imageSize,
+    this.debugTextBounds = const [],
   });
 
   final List<PrivacyFinding> findings;
@@ -20,13 +21,19 @@ class DetectionOverlay extends StatelessWidget {
   /// The ORIGINAL image dimensions in pixels.
   final Size imageSize;
 
+  /// Every line OCR read, drawn faintly. A debugging aid: if a phone
+  /// number is not flagged, this shows instantly whether OCR failed to
+  /// read it or the rules failed to classify it. Two very different bugs.
+  final List<Rect> debugTextBounds;
+
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
       painter: _FindingBoxPainter(
         findings: findings,
         imageSize: imageSize,
-        color: Theme.of(context).colorScheme.primary,
+        scheme: Theme.of(context).colorScheme,
+        debugTextBounds: debugTextBounds,
       ),
     );
   }
@@ -36,12 +43,22 @@ class _FindingBoxPainter extends CustomPainter {
   _FindingBoxPainter({
     required this.findings,
     required this.imageSize,
-    required this.color,
+    required this.scheme,
+    required this.debugTextBounds,
   });
 
   final List<PrivacyFinding> findings;
   final Size imageSize;
-  final Color color;
+  final ColorScheme scheme;
+  final List<Rect> debugTextBounds;
+
+  Color _colorFor(FindingType type) => switch (type) {
+    FindingType.face => scheme.primary,
+    FindingType.qrCode => scheme.tertiary,
+    FindingType.manual => scheme.secondary,
+    // Every text-derived risk shares the alarm colour.
+    _ => scheme.error,
+  };
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -54,22 +71,35 @@ class _FindingBoxPainter extends CustomPainter {
     final scaleX = size.width / imageSize.width;
     final scaleY = size.height / imageSize.height;
 
-    final stroke = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..color = color;
+    Rect toScreen(Rect r) => Rect.fromLTRB(
+      r.left * scaleX,
+      r.top * scaleY,
+      r.right * scaleX,
+      r.bottom * scaleY,
+    );
 
-    final fill = Paint()..color = color.withValues(alpha: 0.15);
+    // Debug layer first, so real findings draw on top of it.
+    final debugStroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..color = Colors.white.withValues(alpha: 0.45);
+
+    for (final bounds in debugTextBounds) {
+      canvas.drawRect(toScreen(bounds), debugStroke);
+    }
 
     for (final finding in findings) {
-      final rect = Rect.fromLTRB(
-        finding.bounds.left * scaleX,
-        finding.bounds.top * scaleY,
-        finding.bounds.right * scaleX,
-        finding.bounds.bottom * scaleY,
+      final rect = toScreen(finding.bounds);
+      final color = _colorFor(finding.type);
+
+      canvas.drawRect(rect, Paint()..color = color.withValues(alpha: 0.18));
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..color = color,
       );
-      canvas.drawRect(rect, fill);
-      canvas.drawRect(rect, stroke);
     }
   }
 
@@ -77,6 +107,7 @@ class _FindingBoxPainter extends CustomPainter {
   bool shouldRepaint(_FindingBoxPainter oldDelegate) {
     return oldDelegate.findings != findings ||
         oldDelegate.imageSize != imageSize ||
-        oldDelegate.color != color;
+        oldDelegate.scheme != scheme ||
+        oldDelegate.debugTextBounds != debugTextBounds;
   }
 }

@@ -4,15 +4,15 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../models/privacy_finding.dart';
-import '../services/face_detection_service.dart';
+import '../services/privacy_engine.dart';
 import '../widgets/detection_overlay.dart';
 
 /// Everything one analysis run produces. A Dart record - a lightweight
 /// tuple with named fields, so we can return two values without inventing
 /// a class for them.
-typedef Analysis = ({ui.Image image, List<PrivacyFinding> findings});
+typedef Analysis = ({ui.Image image, PrivacyScan scan});
 
-/// Phase 3: decode the image, run face detection, draw the results.
+/// Phases 3-5: decode the image, run every detector, draw the results.
 class PreviewScreen extends StatefulWidget {
   const PreviewScreen({super.key, required this.imagePath});
 
@@ -23,9 +23,12 @@ class PreviewScreen extends StatefulWidget {
 }
 
 class _PreviewScreenState extends State<PreviewScreen> {
-  final FaceDetectionService _faces = FaceDetectionService();
+  final PrivacyEngine _engine = PrivacyEngine();
 
   late final Future<Analysis> _analysis;
+
+  /// Debug aid, toggled from the app bar.
+  bool _showAllText = false;
 
   @override
   void initState() {
@@ -35,23 +38,36 @@ class _PreviewScreenState extends State<PreviewScreen> {
 
   @override
   void dispose() {
-    // ML Kit holds a native detector. Leaking it leaks memory outside
-    // the Dart heap, which the garbage collector cannot help with.
-    _faces.dispose();
+    // The detectors hold native ML Kit objects. Leaking them leaks memory
+    // outside the Dart heap, where the garbage collector cannot help.
+    _engine.dispose();
     super.dispose();
   }
 
   Future<Analysis> _analyse() async {
     final bytes = await File(widget.imagePath).readAsBytes();
     final image = await decodeImageFromList(bytes);
-    final findings = await _faces.detect(widget.imagePath);
-    return (image: image, findings: findings);
+    final scan = await _engine.analyse(widget.imagePath);
+    return (image: image, scan: scan);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Privacy check')),
+      appBar: AppBar(
+        title: const Text('Privacy check'),
+        actions: [
+          IconButton(
+            tooltip: _showAllText
+                ? 'Hide everything OCR read'
+                : 'Show everything OCR read',
+            icon: Icon(
+              _showAllText ? Icons.text_fields : Icons.text_fields_outlined,
+            ),
+            onPressed: () => setState(() => _showAllText = !_showAllText),
+          ),
+        ],
+      ),
       body: FutureBuilder<Analysis>(
         future: _analysis,
         builder: (context, snapshot) {
@@ -71,6 +87,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
           return _Result(
             imagePath: widget.imagePath,
             analysis: snapshot.requireData,
+            showAllText: _showAllText,
           );
         },
       ),
@@ -79,16 +96,38 @@ class _PreviewScreenState extends State<PreviewScreen> {
 }
 
 class _Result extends StatelessWidget {
-  const _Result({required this.imagePath, required this.analysis});
+  const _Result({
+    required this.imagePath,
+    required this.analysis,
+    required this.showAllText,
+  });
 
   final String imagePath;
   final Analysis analysis;
+  final bool showAllText;
+
+  /// Turns the findings into "1 face, 2 phone numbers".
+  String _summary(List<PrivacyFinding> findings) {
+    if (findings.isEmpty) return 'No potential risks detected';
+
+    final counts = <FindingType, int>{};
+    for (final finding in findings) {
+      counts[finding.type] = (counts[finding.type] ?? 0) + 1;
+    }
+
+    final parts = counts.entries
+        .map((e) => '${e.value} ${e.key.label.toLowerCase()}${e.value == 1 ? "" : "s"}')
+        .join(', ');
+
+    return '${findings.length} potential '
+        '${findings.length == 1 ? "risk" : "risks"}: $parts';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final image = analysis.image;
-    final findings = analysis.findings;
+    final scan = analysis.scan;
     final imageSize = Size(image.width.toDouble(), image.height.toDouble());
 
     return Column(
@@ -109,8 +148,11 @@ class _Result extends StatelessWidget {
                     children: [
                       Image.file(File(imagePath), fit: BoxFit.fill),
                       DetectionOverlay(
-                        findings: findings,
+                        findings: scan.findings,
                         imageSize: imageSize,
+                        debugTextBounds: showAllText
+                            ? [for (final line in scan.textLines) line.bounds]
+                            : const [],
                       ),
                     ],
                   ),
@@ -124,15 +166,14 @@ class _Result extends StatelessWidget {
           child: Column(
             children: [
               Text(
-                findings.isEmpty
-                    ? 'No faces detected'
-                    : '${findings.length} potential '
-                        '${findings.length == 1 ? "risk" : "risks"} detected',
+                _summary(scan.findings),
+                textAlign: TextAlign.center,
                 style: theme.textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
               Text(
-                'Original image: ${image.width} x ${image.height} px',
+                '${image.width} x ${image.height} px  -  '
+                '${scan.textLines.length} text lines read',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
