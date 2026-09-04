@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../theme/app_theme.dart';
+import '../theme/theme_controller.dart';
 import '../widgets/fade_slide_in.dart';
 import 'analysis_screen.dart';
 
@@ -57,85 +58,128 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.xl,
-            ),
-            // A scroll view rather than a fixed Column: on a small phone
-            // with the largest system font, this content genuinely does
-            // not fit, and overflow stripes are not an acceptable answer.
-            //
-            // Note there are no Spacer widgets here. Spacer is an
-            // Expanded, and Expanded needs a bounded height to expand
-            // into - a scroll view offers infinite height, so the two
-            // cannot be combined. Centring plus explicit gaps is the
-            // pattern that works in a scrollable.
-            child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
-                // Fill the viewport when the content is short, so the
-                // centring has room to work; scroll when it is tall.
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const FadeSlideIn(child: Center(child: _ShieldBadge())),
-                      const SizedBox(height: AppSpacing.xl),
-                      FadeSlideIn(
-                        delay: const Duration(milliseconds: 90),
-                        child: Text(
-                          'Before You Post',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.displaySmall,
-                        ),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.lg,
+                  vertical: AppSpacing.xl,
+                ),
+                // A scroll view rather than a fixed Column: on a small
+                // phone with the largest system font this content does
+                // not fit, and overflow stripes are not an answer.
+                //
+                // Note there are no Spacer widgets. Spacer is an Expanded,
+                // and Expanded needs a bounded height to expand into - a
+                // scroll view offers infinite height, so the two cannot be
+                // combined. Centring plus explicit gaps is the pattern
+                // that works inside a scrollable.
+                child: LayoutBuilder(
+                  builder: (context, constraints) => SingleChildScrollView(
+                    child: ConstrainedBox(
+                      // Fill the viewport when the content is short so the
+                      // centring has room to work; scroll when it is tall.
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
                       ),
-                      const SizedBox(height: AppSpacing.sm),
-                      FadeSlideIn(
-                        delay: const Duration(milliseconds: 150),
-                        child: Text(
-                          'Check a photo for faces, personal details and QR '
-                          'codes before it goes public.',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const FadeSlideIn(
+                            child: Center(child: _ShieldBadge()),
                           ),
-                        ),
+                          const SizedBox(height: AppSpacing.xl),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 90),
+                            child: Text(
+                              'Before You Post',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.displaySmall,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 150),
+                            child: Text(
+                              'Check a photo for faces, personal details '
+                              'and QR codes before it goes public.',
+                              textAlign: TextAlign.center,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xxl),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 230),
+                            child: _ActionCard(
+                              icon: Icons.photo_library_outlined,
+                              title: 'Choose photo',
+                              subtitle: 'Pick an image from your gallery',
+                              enabled: !_picking,
+                              onTap: () => _pickImage(ImageSource.gallery),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 290),
+                            child: _ActionCard(
+                              icon: Icons.photo_camera_outlined,
+                              title: 'Take photo',
+                              subtitle: 'Capture something new',
+                              enabled: !_picking,
+                              onTap: () => _pickImage(ImageSource.camera),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xl),
+                          FadeSlideIn(
+                            delay: const Duration(milliseconds: 350),
+                            child: _OnDeviceNote(color: semantics.safe),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: AppSpacing.xxl),
-                      FadeSlideIn(
-                        delay: const Duration(milliseconds: 230),
-                        child: _ActionCard(
-                          icon: Icons.photo_library_outlined,
-                          title: 'Choose photo',
-                          subtitle: 'Pick an image from your gallery',
-                          enabled: !_picking,
-                          onTap: () => _pickImage(ImageSource.gallery),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      FadeSlideIn(
-                        delay: const Duration(milliseconds: 290),
-                        child: _ActionCard(
-                          icon: Icons.photo_camera_outlined,
-                          title: 'Take photo',
-                          subtitle: 'Capture something new',
-                          enabled: !_picking,
-                          onTap: () => _pickImage(ImageSource.camera),
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xl),
-                      FadeSlideIn(
-                        delay: const Duration(milliseconds: 350),
-                        child: _OnDeviceNote(color: semantics.safe),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+              const Positioned(top: 0, right: 0, child: _ThemeToggle()),
+            ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Switches between light and dark, and remembers the choice.
+class _ThemeToggle extends StatelessWidget {
+  const _ThemeToggle();
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    return IconButton(
+      // An icon-only control needs a name, or a screen reader announces
+      // nothing but "button".
+      tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
+      onPressed: () => ThemeScope.of(context).toggle(brightness),
+      icon: AnimatedSwitcher(
+        duration: AppMotion.medium,
+        // Spin the old icon out and the new one in. The rotation is what
+        // makes this read as one control changing state rather than two
+        // different icons swapping places.
+        transitionBuilder: (child, animation) => RotationTransition(
+          turns: Tween<double>(begin: 0.7, end: 1).animate(animation),
+          child: FadeTransition(opacity: animation, child: child),
+        ),
+        child: Icon(
+          isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+          // The key is what tells AnimatedSwitcher these are different
+          // children. Without it the icon changes with no animation.
+          key: ValueKey<bool>(isDark),
         ),
       ),
     );
@@ -144,8 +188,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
 /// The shield, with a slow halo behind it.
 ///
-/// This is the one continuously animated element in the app. Everything
-/// else moves only in response to something the user did.
+/// This is the one continuously animated element on this screen.
+/// Everything else moves only in response to something the user did.
 class _ShieldBadge extends StatefulWidget {
   const _ShieldBadge();
 
@@ -271,12 +315,7 @@ class _ActionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(
-                  Icons.chevron_right,
-                  color: scheme.onSurfaceVariant,
-                  // Decorative: the card already has a visible label.
-                  semanticLabel: null,
-                ),
+                Icon(Icons.chevron_right, color: scheme.onSurfaceVariant),
               ],
             ),
           ),

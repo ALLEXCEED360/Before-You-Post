@@ -4,31 +4,91 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:before_you_post/main.dart';
+import 'package:before_you_post/screens/intro_screen.dart';
+import 'package:before_you_post/theme/theme_controller.dart';
 
-/// Advances past the staggered entrance animations.
+/// Advances past entrance animations.
 ///
-/// Deliberately NOT pumpAndSettle. The shield on the home screen has a
-/// halo that repeats forever, so "wait until nothing is animating" never
-/// comes true and pumpAndSettle times out. Pumping a fixed duration is
-/// the right tool whenever a screen has any continuous animation.
-Future<void> settleEntrances(WidgetTester tester) async {
+/// Deliberately NOT pumpAndSettle. The intro rings and the home screen's
+/// halo repeat forever, so "wait until nothing is animating" never comes
+/// true and pumpAndSettle times out. Pumping a fixed duration is the
+/// right tool whenever a screen has any continuous animation.
+Future<void> settle(WidgetTester tester) async {
   await tester.pump();
-  await tester.pump(const Duration(seconds: 1));
+  await tester.pump(const Duration(seconds: 2));
+}
+
+Future<ThemeController> pumpApp(WidgetTester tester) async {
+  final controller = ThemeController();
+  await tester.pumpWidget(BeforeYouPostApp(themeController: controller));
+  await settle(tester);
+  return controller;
+}
+
+/// Taps through the intro screen onto the home screen.
+///
+/// tapAt a coordinate, not tap on the prompt text. Plain Text is not a
+/// hit-test target - the handler is the full-screen GestureDetector - so
+/// tapping the label warns that it "would not hit test". Tapping a point
+/// is also a truer test of what the screen promises: tap anywhere.
+Future<void> enterApp(WidgetTester tester) async {
+  await tester.tapAt(tester.getCenter(find.byType(IntroScreen)));
+  await settle(tester);
 }
 
 void main() {
+  setUp(() {
+    // shared_preferences talks to a platform channel that does not exist
+    // in a test. This installs an in-memory stand-in.
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('intro screen invites a tap and leads to the home screen', (
+    WidgetTester tester,
+  ) async {
+    await pumpApp(tester);
+
+    expect(find.text('Before You Post'), findsOneWidget);
+    expect(find.text('Tap anywhere to continue'), findsOneWidget);
+    // The home screen is not built yet.
+    expect(find.text('Choose photo'), findsNothing);
+
+    await enterApp(tester);
+
+    expect(find.text('Choose photo'), findsOneWidget);
+    // pushReplacement, so the intro is gone rather than stacked behind.
+    expect(find.text('Tap anywhere to continue'), findsNothing);
+  });
+
   testWidgets('home screen shows the title and both photo actions', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const BeforeYouPostApp());
-    await settleEntrances(tester);
+    await pumpApp(tester);
+    await enterApp(tester);
 
     expect(find.text('Before You Post'), findsOneWidget);
     expect(find.text('Choose photo'), findsOneWidget);
     expect(find.text('Take photo'), findsOneWidget);
     expect(find.text('Photos are analysed on your device'), findsOneWidget);
+  });
+
+  testWidgets('theme toggle switches mode and offers the opposite next', (
+    WidgetTester tester,
+  ) async {
+    final controller = await pumpApp(tester);
+    await enterApp(tester);
+
+    // Tests start in light mode, so the button offers dark.
+    expect(controller.value, ThemeMode.system);
+    await tester.tap(find.byTooltip('Switch to dark mode'));
+    await settle(tester);
+
+    expect(controller.value, ThemeMode.dark);
+    // And now it offers the way back.
+    expect(find.byTooltip('Switch to light mode'), findsOneWidget);
   });
 
   testWidgets('home screen lays out in dark mode without overflowing', (
@@ -40,8 +100,8 @@ void main() {
       tester.view.platformDispatcher.clearPlatformBrightnessTestValue,
     );
 
-    await tester.pumpWidget(const BeforeYouPostApp());
-    await settleEntrances(tester);
+    await pumpApp(tester);
+    await enterApp(tester);
 
     expect(find.text('Before You Post'), findsOneWidget);
     // An overflow renders as yellow stripes AND throws. Catching it here
@@ -58,8 +118,8 @@ void main() {
     tester.platformDispatcher.textScaleFactorTestValue = 2.0;
     addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-    await tester.pumpWidget(const BeforeYouPostApp());
-    await settleEntrances(tester);
+    await pumpApp(tester);
+    await enterApp(tester);
 
     expect(find.text('Choose photo'), findsOneWidget);
     expect(tester.takeException(), isNull);
