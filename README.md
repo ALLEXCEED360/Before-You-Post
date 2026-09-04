@@ -233,6 +233,8 @@ Detection accuracy still needs real images. A useful set covers: a portrait with
 
 For each, check both that detection is correct **and** that the box lands on the right pixels.
 
+Detector robustness has not been measured systematically yet. Flat, well-lit QR codes and clear text are detected reliably; how far accuracy falls off with angle, blur, glare or low light is currently unknown for all three detectors, and worth quantifying before making any claim about it. Verify that a test image is itself valid before treating a miss as a detector weakness — an unreadable code proves nothing.
+
 ---
 
 ## Known limitations
@@ -240,7 +242,6 @@ For each, check both that detection is correct **and** that the box lands on the
 These are measured, not hypothetical.
 
 - **Redaction does not exist yet.** The app finds and reviews; it cannot yet produce a protected copy. That is the next phase.
-- **Angled QR codes are missed.** A flat QR is detected reliably. A QR photographed at an angle on a box — perspective-distorted — was not detected in testing. Barcode decoding degrades with skew far faster than face detection does.
 - **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Manual redaction (planned) is the escape hatch.
 - **Address detection is shallow.** A regex for "number + street name + suffix" catches common US-style addresses and will miss most international formats.
 - **Phone-number detection is US-centric** and will flag some non-phone digit sequences of the right shape. This is why every finding is labelled *potential* and is reviewable.
