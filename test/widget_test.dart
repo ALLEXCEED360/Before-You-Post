@@ -1,30 +1,22 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// Widget tests build a widget tree in memory - no emulator, no device.
+// They run in about a second, which makes them the cheapest safety net
+// against accidentally breaking a screen.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:before_you_post/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('home screen shows the title and both photo buttons', (
+    WidgetTester tester,
+  ) async {
+    // Build the app and let it settle into its first frame.
+    await tester.pumpWidget(const BeforeYouPostApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // find.text() searches the rendered tree for a Text widget.
+    expect(find.text('BEFORE YOU POST'), findsOneWidget);
+    expect(find.text('Protect your photos before they go public.'), findsOneWidget);
+    expect(find.text('Choose Photo'), findsOneWidget);
+    expect(find.text('Take Photo'), findsOneWidget);
   });
 }
