@@ -8,6 +8,7 @@ import '../models/privacy_finding.dart';
 import '../services/privacy_engine.dart';
 import '../services/redaction_service.dart';
 import '../theme/app_theme.dart';
+import '../utils/geometry.dart';
 import '../widgets/detection_overlay.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/finding_card.dart';
@@ -48,6 +49,17 @@ class _EditorScreenState extends State<EditorScreen> {
 
   bool _showAllText = false;
   bool _protecting = false;
+
+  /// Manual redaction mode (outline section 21). Automatic detection is
+  /// never complete, so the user needs a way to hide anything it missed.
+  bool _drawMode = false;
+
+  /// Drag state while drawing, both in original image pixels.
+  Offset? _dragStartInImage;
+  Rect? _draftRect;
+
+  /// Only ever increases, so manual ids stay unique even after deletions.
+  int _manualCount = 0;
 
   /// Where the finger went down on the photo, so a pan can be told from
   /// a tap. See the Listener in build() for why this is tracked by hand.
@@ -122,6 +134,61 @@ class _EditorScreenState extends State<EditorScreen> {
     _highlight(best.id, scrollToCard: true);
   }
 
+  void _startDraw(Offset pointInImage) {
+    setState(() {
+      _dragStartInImage = pointInImage;
+      _draftRect = null;
+      _highlightedId = null;
+    });
+  }
+
+  void _updateDraw(Offset pointInImage, Size imageSize) {
+    final start = _dragStartInImage;
+    if (start == null) return;
+    setState(() => _draftRect = rectFromDrag(start, pointInImage, imageSize));
+  }
+
+  void _finishDraw() {
+    final rect = _draftRect;
+    setState(() {
+      _dragStartInImage = null;
+      _draftRect = null;
+    });
+
+    // Ignore a stray tap or a flick. Anything under a few pixels is far
+    // more likely to be a mis-tap than a deliberate box.
+    if (rect == null || rect.width < 8 || rect.height < 8) return;
+
+    final finding = PrivacyFinding(
+      id: 'manual_${_manualCount++}',
+      type: FindingType.manual,
+      bounds: rect,
+    );
+
+    setState(() {
+      _findings = [..._findings, finding];
+      _cardKeys[finding.id] = GlobalKey();
+      _highlightedId = finding.id;
+    });
+
+    // The card does not exist until the next frame, so the scroll has to
+    // wait for it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _highlight(finding.id, scrollToCard: true);
+    });
+  }
+
+  void _removeFinding(String id) {
+    setState(() {
+      _findings = [
+        for (final finding in _findings)
+          if (finding.id != id) finding,
+      ];
+      _cardKeys.remove(id);
+      if (_highlightedId == id) _highlightedId = null;
+    });
+  }
+
   Future<void> _protect() async {
     if (_protecting) return;
     setState(() => _protecting = true);
@@ -167,6 +234,17 @@ class _EditorScreenState extends State<EditorScreen> {
       appBar: AppBar(
         title: const Text('Privacy check'),
         actions: [
+          IconButton(
+            tooltip: _drawMode ? 'Done drawing' : 'Draw a box to hide',
+            isSelected: _drawMode,
+            icon: const Icon(Icons.draw_outlined),
+            selectedIcon: const Icon(Icons.draw),
+            onPressed: () => setState(() {
+              _drawMode = !_drawMode;
+              _dragStartInImage = null;
+              _draftRect = null;
+            }),
+          ),
           // A developer tool, not a feature. It answers "did OCR fail to
           // read this, or did the rules fail to classify it?" - two bugs
           // that look identical from the outside and need opposite fixes.
@@ -194,6 +272,11 @@ class _EditorScreenState extends State<EditorScreen> {
             child: ColoredBox(
               color: context.semantics.canvas,
               child: InteractiveViewer(
+                // Panning and drawing are the same gesture. While the
+                // draw tool is on, the viewer has to keep its hands off
+                // or every attempt to draw a box scrolls the photo.
+                panEnabled: !_drawMode,
+                scaleEnabled: !_drawMode,
                 child: Center(
                   // AspectRatio is the trick that keeps the maths honest:
                   // it sizes this box to the image's exact proportions, so
@@ -208,58 +291,80 @@ class _EditorScreenState extends State<EditorScreen> {
                       // taps on the photo silently did nothing. Listener
                       // receives raw pointer events and never competes in
                       // the gesture arena, so both zooming and tapping work.
-                      builder: (context, constraints) => Listener(
-                        behavior: HitTestBehavior.opaque,
-                        onPointerDown: (event) =>
-                            _pointerDownAt = event.localPosition,
-                        onPointerUp: (event) {
-                          final down = _pointerDownAt;
-                          _pointerDownAt = null;
-                          if (down == null) return;
+                      builder: (context, constraints) {
+                        final displayed = Size(
+                          constraints.maxWidth,
+                          constraints.maxHeight,
+                        );
 
-                          // Anything that moved was a pan or a pinch, not
-                          // a tap on a face.
-                          if ((event.localPosition - down).distance > 12) {
-                            return;
-                          }
+                        Offset toImage(Offset local) =>
+                            screenToImage(local, displayed, imageSize);
 
-                          // The inverse of what the overlay does when it
-                          // draws: screen pixels back to image pixels,
-                          // using the same single scale factor.
-                          final local = event.localPosition;
-                          _handleImageTap(
-                            Offset(
-                              local.dx * imageSize.width / constraints.maxWidth,
-                              local.dy *
-                                  imageSize.height /
-                                  constraints.maxHeight,
-                            ),
-                          );
-                        },
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            Hero(
-                              tag: 'photo',
-                              child: Image.file(
-                                File(widget.imagePath),
-                                fit: BoxFit.fill,
+                        return Listener(
+                          behavior: HitTestBehavior.opaque,
+                          onPointerDown: (event) {
+                            _pointerDownAt = event.localPosition;
+                            if (_drawMode) {
+                              _startDraw(toImage(event.localPosition));
+                            }
+                          },
+                          onPointerMove: (event) {
+                            if (!_drawMode) return;
+                            _updateDraw(
+                              toImage(event.localPosition),
+                              imageSize,
+                            );
+                          },
+                          onPointerCancel: (_) {
+                            _pointerDownAt = null;
+                            if (_drawMode) _finishDraw();
+                          },
+                          onPointerUp: (event) {
+                            final down = _pointerDownAt;
+                            _pointerDownAt = null;
+
+                            if (_drawMode) {
+                              _finishDraw();
+                              return;
+                            }
+
+                            if (down == null) return;
+
+                            // Anything that moved was a pan or a pinch,
+                            // not a tap on a face.
+                            if ((event.localPosition - down).distance > 12) {
+                              return;
+                            }
+
+                            _handleImageTap(toImage(event.localPosition));
+                          },
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Hero(
+                                tag: 'photo',
+                                child: Image.file(
+                                  File(widget.imagePath),
+                                  fit: BoxFit.fill,
+                                ),
                               ),
-                            ),
-                            DetectionOverlay(
-                              findings: _findings,
-                              imageSize: imageSize,
-                              highlightedId: _highlightedId,
-                              debugTextBounds: _showAllText
-                                  ? [
-                                      for (final line in widget.scan.textLines)
-                                        line.bounds,
-                                    ]
-                                  : const [],
-                            ),
-                          ],
-                        ),
-                      ),
+                              DetectionOverlay(
+                                findings: _findings,
+                                imageSize: imageSize,
+                                highlightedId: _highlightedId,
+                                draftRect: _draftRect,
+                                debugTextBounds: _showAllText
+                                    ? [
+                                        for (final line
+                                            in widget.scan.textLines)
+                                          line.bounds,
+                                      ]
+                                    : const [],
+                              ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
@@ -273,6 +378,8 @@ class _EditorScreenState extends State<EditorScreen> {
               image: widget.image,
               cardKeys: _cardKeys,
               highlightedId: _highlightedId,
+              drawMode: _drawMode,
+              onDeleteFinding: _removeFinding,
               hiddenCount: _hiddenCount,
               protecting: _protecting,
               onSelectedChanged: _setSelected,
@@ -294,6 +401,8 @@ class _ReviewPanel extends StatelessWidget {
     required this.image,
     required this.cardKeys,
     required this.highlightedId,
+    required this.drawMode,
+    required this.onDeleteFinding,
     required this.hiddenCount,
     required this.protecting,
     required this.onSelectedChanged,
@@ -307,6 +416,8 @@ class _ReviewPanel extends StatelessWidget {
   final ui.Image image;
   final Map<String, GlobalKey> cardKeys;
   final String? highlightedId;
+  final bool drawMode;
+  final ValueChanged<String> onDeleteFinding;
   final int hiddenCount;
   final bool protecting;
   final void Function(int index, bool selected) onSelectedChanged;
@@ -362,9 +473,14 @@ class _ReviewPanel extends StatelessWidget {
                       ],
                     ),
                     Text(
-                      'Tap the photo to find an item in this list.',
+                      drawMode
+                          ? 'Drag on the photo to cover anything the scan '
+                                'missed.'
+                          : 'Tap the photo to find an item in this list.',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
+                        color: drawMode
+                            ? scheme.secondary
+                            : scheme.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
@@ -408,6 +524,11 @@ class _ReviewPanel extends StatelessWidget {
                                   onMethodChanged: (method) =>
                                       onMethodChanged(index, method),
                                   onTap: () => onTapFinding(finding.id),
+                                  // Only a manual box can be removed -
+                                  // see FindingCard.onDelete.
+                                  onDelete: finding.type == FindingType.manual
+                                      ? () => onDeleteFinding(finding.id)
+                                      : null,
                                 ),
                               ),
                             ],

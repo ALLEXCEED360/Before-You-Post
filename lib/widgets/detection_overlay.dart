@@ -18,6 +18,7 @@ class DetectionOverlay extends StatelessWidget {
     required this.findings,
     required this.imageSize,
     this.highlightedId,
+    this.draftRect,
     this.debugTextBounds = const [],
   });
 
@@ -29,6 +30,10 @@ class DetectionOverlay extends StatelessWidget {
   /// The finding currently being looked at, drawn emphasised so it can be
   /// picked out of a crowd of identical boxes.
   final String? highlightedId;
+
+  /// The rectangle being dragged right now, in original image pixels.
+  /// Drawn live so the user can see what they are about to hide.
+  final Rect? draftRect;
 
   /// Every line OCR read, drawn faintly. A debugging aid: if a phone
   /// number is not flagged, this shows instantly whether OCR failed to
@@ -49,6 +54,7 @@ class DetectionOverlay extends StatelessWidget {
           scheme: scheme,
           riskColor: context.semantics.risk,
           highlightedId: highlightedId,
+          draftRect: draftRect,
           debugTextBounds: debugTextBounds,
         ),
       ),
@@ -63,6 +69,7 @@ class _FindingBoxPainter extends CustomPainter {
     required this.scheme,
     required this.riskColor,
     required this.highlightedId,
+    required this.draftRect,
     required this.debugTextBounds,
   });
 
@@ -71,6 +78,7 @@ class _FindingBoxPainter extends CustomPainter {
   final ColorScheme scheme;
   final Color riskColor;
   final String? highlightedId;
+  final Rect? draftRect;
   final List<Rect> debugTextBounds;
 
   @override
@@ -157,6 +165,23 @@ class _FindingBoxPainter extends CustomPainter {
 
       _drawBadge(canvas, size, rect, index + 1, color, isHighlighted, fade);
     }
+
+    // The rectangle currently under the finger, drawn on top of
+    // everything so it is never hidden behind an existing box.
+    final draft = draftRect;
+    if (draft != null && !draft.isEmpty) {
+      final rect = toScreen(draft);
+      final color = scheme.secondary;
+
+      canvas.drawRect(rect, Paint()..color = color.withValues(alpha: 0.25));
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = color,
+      );
+    }
   }
 
   /// The number that ties this box to its row in the list.
@@ -239,6 +264,7 @@ class _FindingBoxPainter extends CustomPainter {
         oldDelegate.scheme != scheme ||
         oldDelegate.riskColor != riskColor ||
         oldDelegate.highlightedId != highlightedId ||
+        oldDelegate.draftRect != draftRect ||
         oldDelegate.debugTextBounds != debugTextBounds;
   }
 }

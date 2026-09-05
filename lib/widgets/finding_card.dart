@@ -21,6 +21,7 @@ class FindingCard extends StatelessWidget {
     required this.onSelectedChanged,
     required this.onMethodChanged,
     required this.onTap,
+    this.onDelete,
   });
 
   final PrivacyFinding finding;
@@ -39,6 +40,12 @@ class FindingCard extends StatelessWidget {
 
   /// Tapping the card points at this finding on the image.
   final VoidCallback onTap;
+
+  /// Only manual boxes can be removed. A detected finding can be kept
+  /// rather than hidden, but deleting it would mean losing the record
+  /// that the scan found something - and re-running the scan would bring
+  /// it straight back anyway.
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -110,6 +117,12 @@ class FindingCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (onDelete != null)
+                    IconButton(
+                      tooltip: 'Remove this box',
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      onPressed: onDelete,
+                    ),
                   const SizedBox(width: AppSpacing.sm),
                   // Inside a Semantics wrapper so a screen reader
                   // announces which finding this switch belongs to,

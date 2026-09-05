@@ -18,10 +18,10 @@ Built with Flutter and Google ML Kit. No backend, no accounts, no image uploads.
 | ![Text findings](docs/screenshots/editor-text.png) | ![QR finding](docs/screenshots/editor-qr.png) | ![Dark theme](docs/screenshots/home-dark.png) |
 | Numbered boxes on exactly the sensitive spans | Decoded payload shown so you can judge it | Every screen themed from the same tokens |
 
-| Picking one of many | The protected copy |
-|:---:|:---:|
-| ![Redaction methods](docs/screenshots/editor-methods.png) | ![Protected result](docs/screenshots/result.png) |
-| Tapping face 8 dims the other 19 and scrolls to its card | Rendered once from the original |
+| Picking one of many | Drawing your own | The protected copy |
+|:---:|:---:|:---:|
+| ![Redaction methods](docs/screenshots/editor-methods.png) | ![Manual redaction](docs/screenshots/manual.png) | ![Protected result](docs/screenshots/result.png) |
+| Tapping face 8 dims the other 19 and scrolls to its card | Covering a QR code the scan did not find | Rendered once from the original |
 
 > The findings screenshots use a deliberate test image. The six items under **SHOULD BE FLAGGED** are all caught; the three under **SHOULD NOT BE FLAGGED** are all correctly ignored, including a 16-digit order number that fails the Luhn check. In the protected copy, note that "Call me at" and "Card" survive — only the sensitive spans are hidden, not the whole line.
 
@@ -41,7 +41,7 @@ This is an **in-progress project**, and the README says what actually works toda
 | Choose blur / pixelate / blackout per finding | ✅ Working |
 | **Redaction — renders a protected copy** | ✅ Working |
 | Light + dark themes, persisted | ✅ Working |
-| Manual drag-to-redact | ❌ Not built |
+| Manual drag-to-redact for anything the scan missed | ✅ Working |
 | Save / share the protected copy | ❌ Not built — those buttons on the result screen are visibly disabled |
 | iOS support | ❌ Not configured (Android-only project) |
 
@@ -120,6 +120,7 @@ lib/
 │   ├── app_theme.dart               Colour, spacing and motion tokens
 │   └── theme_controller.dart        Persisted light/dark choice
 ├── utils/
+│   ├── geometry.dart                Drag-to-rect and screen-to-image maths
 │   └── regex_utils.dart             Patterns + Luhn
 └── widgets/
     ├── detection_overlay.dart       Draws the numbered boxes
@@ -132,6 +133,8 @@ lib/
 **Screens talk to `PrivacyEngine`, never to a detector directly.** Adding QR detection to a working face + OCR pipeline required one new service file and a handful of lines in the engine — no screen, model or widget changed.
 
 **No ML Kit type escapes its own service.** Each detector translates its library's result into `PrivacyFinding` and nothing leaks past that boundary. That is what will make it possible to swap in a YOLO model for licence plates later without touching the UI.
+
+**Detection is assumed to be incomplete.** The crate photo in the screenshots above carries a QR code that ML Kit does not detect at all, and it is not an unusual case. Manual drag-to-redact (§21) is therefore not a nice-to-have: it is what keeps the app useful when the detectors are wrong, and it is why the empty state says "automatic checks are not perfect" rather than "you're safe".
 
 **Findings are addressable, not just listed.** Twenty faces produce twenty rows all labelled "Face", which is unusable on its own. Each finding therefore carries a number drawn both on its box and on its card, and each card shows a thumbnail of the actual region cropped straight from the decoded image. Tapping a box on the photo dims the others and scrolls its card into view; tapping a card highlights its box. Without that, choosing which face to hide is trial and error.
 
@@ -231,7 +234,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-24 tests, all running **in memory with no emulator**, in about a second.
+30 tests, all running **in memory with no emulator**, in about a second.
 
 **Unit tests (`test/sensitive_text_test.dart`)** cover the part most likely to be wrong and cheapest to check — the rules. Positive cases for every pattern, plus the negatives that matter:
 
@@ -279,8 +282,7 @@ These are measured, not hypothetical.
 ## Roadmap
 
 **Next — v1 completion**
-1. Manual drag-to-redact for anything the detectors miss
-2. Save to gallery and share via the system share sheet
+1. Save to gallery and share via the system share sheet — the last piece of the MVP
 
 The redaction engine itself is done: blur, pixelate and blackout, rendered **once** from the original plus the list of instructions rather than by re-editing a JPEG, and run in an isolate so the UI never freezes.
 
