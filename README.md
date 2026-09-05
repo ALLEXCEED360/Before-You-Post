@@ -29,7 +29,9 @@ Built with Flutter and Google ML Kit. No backend, no accounts, no image uploads.
 
 ## Status
 
-This is an **in-progress project**, and the README says what actually works today rather than what is planned.
+**The MVP is complete.** Every step of the outline's definition of done works end to end: open the app, choose or take a photo, scan it on-device, review each finding, choose what to hide and how, draw your own box over anything missed, produce a protected copy, and save or share it.
+
+The README says what actually works today rather than what is planned.
 
 | Capability | State |
 |---|---|
@@ -42,7 +44,7 @@ This is an **in-progress project**, and the README says what actually works toda
 | **Redaction — renders a protected copy** | ✅ Working |
 | Light + dark themes, persisted | ✅ Working |
 | Manual drag-to-redact for anything the scan missed | ✅ Working |
-| Save / share the protected copy | ❌ Not built — those buttons on the result screen are visibly disabled |
+| Save to the gallery, or share via the system share sheet | ✅ Working |
 | iOS support | ❌ Not configured (Android-only project) |
 
 ---
@@ -165,6 +167,8 @@ The overlay avoids letterbox maths entirely by forcing the image container to th
 | Sensitive text | Regex + Luhn (hand-written) | Readable, testable, explainable |
 | Image picking | `image_picker` | Gallery + camera, uses the Android photo picker |
 | Redaction | `image` | Pure Dart, so the pixel work runs in an isolate |
+| Sharing | `share_plus` | Hands the protected copy to the system share sheet |
+| Saving | `gal` | Writes to the gallery via MediaStore |
 | Preferences | `shared_preferences` | Theme choice only |
 | Backend | **None** | See below |
 
@@ -269,7 +273,6 @@ These are measured, not hypothetical.
 - **Blur and pixelation are weaker than blackout.** Both are lossy but not destructive, and against a short, guessable value such as a phone number they are a softer guarantee than a solid block. That is why text defaults to blackout and only faces default to blur. An early blur radius left phone numbers readable in testing; it is now far more aggressive, and a test pins that strength.
 - **The release APK is about 117 MB.** It is a universal build carrying every ABI plus ML Kit's bundled models. `flutter build appbundle`, or `--split-per-abi`, would cut that substantially; neither is set up yet.
 - **The protected copy is always re-encoded from raw pixels**, so a palette PNG comes back as a full-colour PNG and is larger than the original, and an AVIF or HEIC input comes back as JPEG. Correctness and format support over file size.
-- **The protected copy cannot be saved or shared yet.** It is rendered and displayed, but writing it to the gallery or handing it to the share sheet is the next phase.
 - **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Manual redaction (planned) is the escape hatch.
 - **Address detection is shallow.** A regex for "number + street name + suffix" catches common US-style addresses and will miss most international formats.
 - **Phone-number detection is US-centric** and will flag some non-phone digit sequences of the right shape. This is why every finding is labelled *potential* and is reviewable.
@@ -281,10 +284,7 @@ These are measured, not hypothetical.
 
 ## Roadmap
 
-**Next — v1 completion**
-1. Save to gallery and share via the system share sheet — the last piece of the MVP
-
-The redaction engine itself is done: blur, pixelate and blackout, rendered **once** from the original plus the list of instructions rather than by re-editing a JPEG, and run in an isolate so the UI never freezes.
+The MVP is finished, so everything below is genuinely optional.
 
 **Later**
 - Licence-plate detection with a YOLO model

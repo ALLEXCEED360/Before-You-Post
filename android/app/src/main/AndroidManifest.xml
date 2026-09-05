@@ -1,4 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Saving to the gallery. Android 10 and later write through
+         MediaStore and need no permission at all; API 24-28 still do, and
+         this app supports back to 24. maxSdkVersion keeps the permission
+         off newer devices, where asking for broad storage access would be
+         both unnecessary and a bad look for a privacy tool. -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
     <application
         android:label="before_you_post"
         android:name="${applicationName}"

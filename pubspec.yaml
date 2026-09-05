@@ -40,6 +40,8 @@ dependencies:
   google_mlkit_barcode_scanning: ^0.16.1
   shared_preferences: ^2.5.5
   image: ^4.9.2
+  share_plus: ^13.3.0
+  gal: ^2.3.3
 
 dev_dependencies:
   flutter_test:
