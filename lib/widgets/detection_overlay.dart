@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/privacy_finding.dart';
 import '../theme/app_theme.dart';
 
-/// Draws a box around each finding.
+/// Draws a numbered box around each finding.
 ///
 /// This widget must be laid out at EXACTLY the displayed size of the image,
 /// with the image's aspect ratio. The parent guarantees that with an
@@ -14,6 +14,7 @@ class DetectionOverlay extends StatelessWidget {
     super.key,
     required this.findings,
     required this.imageSize,
+    this.highlightedId,
     this.debugTextBounds = const [],
   });
 
@@ -21,6 +22,10 @@ class DetectionOverlay extends StatelessWidget {
 
   /// The ORIGINAL image dimensions in pixels.
   final Size imageSize;
+
+  /// The finding currently being looked at, drawn emphasised so it can be
+  /// picked out of a crowd of identical boxes.
+  final String? highlightedId;
 
   /// Every line OCR read, drawn faintly. A debugging aid: if a phone
   /// number is not flagged, this shows instantly whether OCR failed to
@@ -40,6 +45,7 @@ class DetectionOverlay extends StatelessWidget {
           imageSize: imageSize,
           scheme: scheme,
           riskColor: context.semantics.risk,
+          highlightedId: highlightedId,
           debugTextBounds: debugTextBounds,
         ),
       ),
@@ -53,6 +59,7 @@ class _FindingBoxPainter extends CustomPainter {
     required this.imageSize,
     required this.scheme,
     required this.riskColor,
+    required this.highlightedId,
     required this.debugTextBounds,
   });
 
@@ -60,6 +67,7 @@ class _FindingBoxPainter extends CustomPainter {
   final Size imageSize;
   final ColorScheme scheme;
   final Color riskColor;
+  final String? highlightedId;
   final List<Rect> debugTextBounds;
 
   Color _colorFor(FindingType type) => switch (type) {
@@ -98,19 +106,33 @@ class _FindingBoxPainter extends CustomPainter {
       canvas.drawRect(toScreen(bounds), debugStroke);
     }
 
-    for (final finding in findings) {
+    final hasFocus = highlightedId != null;
+
+    for (final (index, finding) in findings.indexed) {
       final rect = toScreen(finding.bounds);
       final color = _colorFor(finding.type);
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
+      final isHighlighted = finding.id == highlightedId;
+
+      // When one finding is being pointed at, everything else recedes.
+      // Drawing the chosen box a little thicker was not enough to pick it
+      // out of twenty faces; dimming its neighbours is what makes it read.
+      final fade = hasFocus && !isHighlighted ? 0.28 : 1.0;
 
       if (finding.selected) {
-        canvas.drawRRect(rrect, Paint()..color = color.withValues(alpha: 0.20));
+        canvas.drawRRect(
+          rrect,
+          Paint()
+            ..color = color.withValues(
+              alpha: (isHighlighted ? 0.34 : 0.20) * fade,
+            ),
+        );
         canvas.drawRRect(
           rrect,
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 3
-            ..color = color,
+            ..strokeWidth = isHighlighted ? 6 : 3
+            ..color = color.withValues(alpha: fade),
         );
       } else {
         // Kept, not hidden. Still drawn, so the user can see what the
@@ -119,11 +141,81 @@ class _FindingBoxPainter extends CustomPainter {
           rrect,
           Paint()
             ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..color = color.withValues(alpha: 0.45),
+            ..strokeWidth = isHighlighted ? 4 : 1.5
+            ..color = color.withValues(
+              alpha: (isHighlighted ? 1.0 : 0.45) * fade,
+            ),
         );
       }
+
+      // A white ring outside the box, so the highlight survives being
+      // drawn over a bright or busy part of the photo.
+      if (isHighlighted) {
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(rect.inflate(3), const Radius.circular(9)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..color = Colors.white.withValues(alpha: 0.85),
+        );
+      }
+
+      _drawBadge(canvas, rect, index + 1, color, isHighlighted, fade);
     }
+  }
+
+  /// The number that ties this box to its row in the list.
+  ///
+  /// With five faces in one photo, "Face" five times tells you nothing.
+  /// A number on both the box and the card is what makes them one thing.
+  void _drawBadge(
+    Canvas canvas,
+    Rect rect,
+    int number,
+    Color color,
+    bool isHighlighted,
+    double fade,
+  ) {
+    final radius = isHighlighted ? 16.0 : 11.0;
+
+    // Sit the badge just outside the top-left corner, but pull it back
+    // inside when the box is near the edge of the image.
+    final centre = Offset(
+      rect.left.clamp(radius, double.infinity),
+      rect.top.clamp(radius, double.infinity),
+    );
+
+    canvas.drawCircle(
+      centre,
+      radius,
+      Paint()..color = color.withValues(alpha: fade),
+    );
+    canvas.drawCircle(
+      centre,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = Colors.white.withValues(alpha: 0.9 * fade),
+    );
+
+    final painter = TextPainter(
+      text: TextSpan(
+        text: '$number',
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: fade),
+          fontSize: radius,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    painter.paint(
+      canvas,
+      centre - Offset(painter.width / 2, painter.height / 2),
+    );
   }
 
   @override
@@ -132,6 +224,7 @@ class _FindingBoxPainter extends CustomPainter {
         oldDelegate.imageSize != imageSize ||
         oldDelegate.scheme != scheme ||
         oldDelegate.riskColor != riskColor ||
+        oldDelegate.highlightedId != highlightedId ||
         oldDelegate.debugTextBounds != debugTextBounds;
   }
 }

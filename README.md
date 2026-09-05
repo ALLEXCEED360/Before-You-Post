@@ -18,10 +18,10 @@ Built with Flutter and Google ML Kit. No backend, no accounts, no image uploads.
 | ![Text findings](docs/screenshots/editor-text.png) | ![QR finding](docs/screenshots/editor-qr.png) | ![Dark theme](docs/screenshots/home-dark.png) |
 | Tight boxes on exactly the sensitive spans | Decoded payload shown so you can judge it | Every screen themed from the same tokens |
 
-| Choosing how to hide | The protected copy |
+| Picking one of many | The protected copy |
 |:---:|:---:|
 | ![Redaction methods](docs/screenshots/editor-methods.png) | ![Protected result](docs/screenshots/result.png) |
-| Blur, pixelate or blackout, per finding | Rendered once from the original |
+| Numbered boxes, region thumbnails, blur/pixelate/blackout per finding | Rendered once from the original |
 
 > The findings screenshots use a deliberate test image. The six items under **SHOULD BE FLAGGED** are all caught; the three under **SHOULD NOT BE FLAGGED** are all correctly ignored, including a 16-digit order number that fails the Luhn check. In the protected copy, note that "Call me at" and "Card" survive — only the sensitive spans are hidden, not the whole line.
 
@@ -122,14 +122,17 @@ lib/
 ├── utils/
 │   └── regex_utils.dart             Patterns + Luhn
 └── widgets/
-    ├── detection_overlay.dart       Draws the boxes
+    ├── detection_overlay.dart       Draws the numbered boxes
     ├── finding_card.dart            One reviewable finding
+    ├── region_thumbnail.dart        Crop of a finding, for its card
     └── fade_slide_in.dart           Staggered entrance animation
 ```
 
 **Screens talk to `PrivacyEngine`, never to a detector directly.** Adding QR detection to a working face + OCR pipeline required one new service file and a handful of lines in the engine — no screen, model or widget changed.
 
 **No ML Kit type escapes its own service.** Each detector translates its library's result into `PrivacyFinding` and nothing leaks past that boundary. That is what will make it possible to swap in a YOLO model for licence plates later without touching the UI.
+
+**Findings are addressable, not just listed.** Twenty faces produce twenty rows all labelled "Face", which is unusable on its own. Each finding therefore carries a number drawn both on its box and on its card, and each card shows a thumbnail of the actual region cropped straight from the decoded image. Tapping a box on the photo dims the others and scrolls its card into view; tapping a card highlights its box. Without that, choosing which face to hide is trial and error.
 
 **The redaction engine works from decoded pixels, not from the file.** It is handed the same RGBA buffer Flutter already decoded for display, rather than re-reading the image itself. Three things follow from that, and each was learned the hard way:
 
