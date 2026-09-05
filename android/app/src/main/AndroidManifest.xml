@@ -8,7 +8,7 @@
         android:maxSdkVersion="28" />
 
     <application
-        android:label="before_you_post"
+        android:label="Before You Post"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
