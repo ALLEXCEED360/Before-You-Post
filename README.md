@@ -86,7 +86,7 @@ Three independent detectors run **concurrently** on the same image, and their re
 
 Two design decisions carry most of the weight:
 
-**Reading text and judging text are separate problems.** `TextRecognitionService` knows how to read words and where they sit; it has no opinion about whether they are private. `SensitiveTextDetector` decides what is sensitive and never touches ML Kit. They fail in different ways and are debugged differently — an unflagged phone number is either an OCR miss or a rules miss, and those need opposite fixes. The debug toggle in the app bar draws every line OCR read, which tells you which of the two happened in about a second.
+**Reading text and judging text are separate problems.** `TextRecognitionService` knows how to read words and where they sit; it has no opinion about whether they are private. `SensitiveTextDetector` decides what is sensitive and never touches ML Kit. They fail in different ways and are debugged differently — an unflagged phone number is either an OCR miss or a rules miss, and those need opposite fixes. A debug-build-only toggle in the app bar draws every line OCR read, which tells you which of the two happened in about a second. It is gated behind `kDebugMode`, so it never reaches a release build.
 
 **The rules are deliberately deterministic.** Regex plus validation, not a model. Rules are readable, unit-testable without a device, and explainable when they get something wrong. NLP is a later version, not a starting point.
 
@@ -217,6 +217,9 @@ Two issues you may hit, both caused by the current Android toolchain rather than
 **`Process 'command sdkmanager.bat' finished with non-zero exit value -1073740791`**
 Android's new CLI ships a `sdkmanager` compatibility shim that mis-parses package names containing a semicolon (it splits `ndk;28.2.13676358` into two bogus names) and then crashes. Gradle blames an innocent line in `android/build.gradle.kts`. **Fix:** install the NDK manually through Android Studio's GUI, as above, so Gradle never invokes the installer.
 
+**A release build fails at R8, or builds and then crashes on every detector**
+Two separate failures, and the first hides the second. R8 first aborts over ML Kit text recognisers for scripts the app does not use; once that is silenced it strips the classes ML Kit loads by reflection, so the APK builds cleanly and then throws `Attempt to invoke virtual method 'java.lang.Class java.lang.Object.getClass()' on a null object reference` on every scan. Both are handled by `android/app/proguard-rules.pro`, which is wired into the release build type. **Debug builds do not run R8 at all, so neither problem is visible until you build a release APK** - worth doing early rather than at ship time.
+
 **`Could not close incremental caches ... compileDebugKotlin`**
 Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and survives a `flutter clean`. Already handled in `android/gradle.properties` via `kotlin.incremental=false`. Plugin Kotlin sources never change, so this costs essentially nothing, and Dart compilation and hot reload are unaffected. Remove the line once the upstream bug is fixed.
 
@@ -261,6 +264,7 @@ Detector robustness has not been measured systematically yet. Flat, well-lit QR 
 These are measured, not hypothetical.
 
 - **Blur and pixelation are weaker than blackout.** Both are lossy but not destructive, and against a short, guessable value such as a phone number they are a softer guarantee than a solid block. That is why text defaults to blackout and only faces default to blur. An early blur radius left phone numbers readable in testing; it is now far more aggressive, and a test pins that strength.
+- **The release APK is about 117 MB.** It is a universal build carrying every ABI plus ML Kit's bundled models. `flutter build appbundle`, or `--split-per-abi`, would cut that substantially; neither is set up yet.
 - **The protected copy is always re-encoded from raw pixels**, so a palette PNG comes back as a full-colour PNG and is larger than the original, and an AVIF or HEIC input comes back as JPEG. Correctness and format support over file size.
 - **The protected copy cannot be saved or shared yet.** It is rendered and displayed, but writing it to the gallery or handing it to the share sheet is the next phase.
 - **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Manual redaction (planned) is the escape hatch.

@@ -1,5 +1,8 @@
 gradle-wrapper.jar
 /.gradle
+# The root .gitignore anchors /build/ to the repo root, so Gradle's output
+# here was untracked rather than ignored.
+/build/
 /captures/
 /gradlew
 /gradlew.bat

@@ -34,6 +34,19 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+
+            // Without these, R8 aborts the release build over ML Kit text
+            // recognisers for scripts this app does not use, and then -
+            // once it builds - strips the classes ML Kit loads by
+            // reflection, so every detector fails at runtime. See
+            // proguard-rules.pro for the detail.
+            //
+            // AGP 9 removed proguard-android.txt, so the optimising
+            // variant is the only default available.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

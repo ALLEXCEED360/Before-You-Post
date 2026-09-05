@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../models/privacy_finding.dart';
@@ -166,15 +167,24 @@ class _EditorScreenState extends State<EditorScreen> {
       appBar: AppBar(
         title: const Text('Privacy check'),
         actions: [
-          IconButton(
-            tooltip: _showAllText
-                ? 'Hide everything OCR read'
-                : 'Show everything OCR read',
-            icon: Icon(
-              _showAllText ? Icons.text_fields : Icons.text_fields_outlined,
+          // A developer tool, not a feature. It answers "did OCR fail to
+          // read this, or did the rules fail to classify it?" - two bugs
+          // that look identical from the outside and need opposite fixes.
+          //
+          // Gated to debug builds: a user tapping it would just get
+          // unexplained white boxes over their photo. kDebugMode is a
+          // compile-time constant, so this disappears entirely from a
+          // release build rather than merely being hidden.
+          if (kDebugMode)
+            IconButton(
+              tooltip: _showAllText
+                  ? 'Hide everything OCR read'
+                  : 'Show everything OCR read',
+              icon: Icon(
+                _showAllText ? Icons.text_fields : Icons.text_fields_outlined,
+              ),
+              onPressed: () => setState(() => _showAllText = !_showAllText),
             ),
-            onPressed: () => setState(() => _showAllText = !_showAllText),
-          ),
         ],
       ),
       body: Column(
