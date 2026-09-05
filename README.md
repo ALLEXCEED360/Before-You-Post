@@ -18,7 +18,12 @@ Built with Flutter and Google ML Kit. No backend, no accounts, no image uploads.
 | ![Text findings](docs/screenshots/editor-text.png) | ![QR finding](docs/screenshots/editor-qr.png) | ![Dark theme](docs/screenshots/home-dark.png) |
 | Tight boxes on exactly the sensitive spans | Decoded payload shown so you can judge it | Every screen themed from the same tokens |
 
-> The "findings — text" screenshot is a deliberate test image. The six items under **SHOULD BE FLAGGED** are all caught; the three under **SHOULD NOT BE FLAGGED** are all correctly ignored, including a 16-digit order number that fails the Luhn check.
+| Choosing how to hide | The protected copy |
+|:---:|:---:|
+| ![Redaction methods](docs/screenshots/editor-methods.png) | ![Protected result](docs/screenshots/result.png) |
+| Blur, pixelate or blackout, per finding | Rendered once from the original |
+
+> The findings screenshots use a deliberate test image. The six items under **SHOULD BE FLAGGED** are all caught; the three under **SHOULD NOT BE FLAGGED** are all correctly ignored, including a 16-digit order number that fails the Luhn check. In the protected copy, note that "Call me at" and "Card" survive — only the sensitive spans are hidden, not the whole line.
 
 ---
 
@@ -33,10 +38,11 @@ This is an **in-progress project**, and the README says what actually works toda
 | OCR + rule-based detection of phone numbers, emails, URLs, card numbers, addresses | ✅ Working |
 | QR and barcode detection, with decoded payload shown | ✅ Working |
 | Review each finding and choose hide / keep | ✅ Working |
+| Choose blur / pixelate / blackout per finding | ✅ Working |
+| **Redaction — renders a protected copy** | ✅ Working |
 | Light + dark themes, persisted | ✅ Working |
-| **Redaction (blur / pixelate / blackout)** | ❌ **Not built yet** — the "Protect image" button is deliberately disabled |
 | Manual drag-to-redact | ❌ Not built |
-| Save / share the protected copy | ❌ Not built |
+| Save / share the protected copy | ❌ Not built — those buttons on the result screen are visibly disabled |
 | iOS support | ❌ Not configured (Android-only project) |
 
 ---
@@ -73,7 +79,7 @@ Three independent detectors run **concurrently** on the same image, and their re
                     User review
                 (hide / keep each item)
                           │
-                  REDACTION ENGINE          ← not built yet
+                  REDACTION ENGINE
                           │
                    Protected image
 ```
@@ -101,13 +107,15 @@ lib/
 │   ├── intro_screen.dart            Tap anywhere to continue
 │   ├── home_screen.dart             Choose / take photo
 │   ├── analysis_screen.dart         Per-detector progress
-│   └── editor_screen.dart           Image + overlays + review list
+│   ├── editor_screen.dart           Image + overlays + review list
+│   └── result_screen.dart           The protected copy
 ├── services/
 │   ├── privacy_engine.dart          Owns and merges every detector
 │   ├── face_detection_service.dart
 │   ├── text_recognition_service.dart
 │   ├── qr_detection_service.dart
-│   └── sensitive_text_detector.dart
+│   ├── sensitive_text_detector.dart
+│   └── redaction_service.dart       Renders the protected copy
 ├── theme/
 │   ├── app_theme.dart               Colour, spacing and motion tokens
 │   └── theme_controller.dart        Persisted light/dark choice
@@ -122,6 +130,12 @@ lib/
 **Screens talk to `PrivacyEngine`, never to a detector directly.** Adding QR detection to a working face + OCR pipeline required one new service file and a handful of lines in the engine — no screen, model or widget changed.
 
 **No ML Kit type escapes its own service.** Each detector translates its library's result into `PrivacyFinding` and nothing leaks past that boundary. That is what will make it possible to swap in a YOLO model for licence plates later without touching the UI.
+
+**The redaction engine works from decoded pixels, not from the file.** It is handed the same RGBA buffer Flutter already decoded for display, rather than re-reading the image itself. Three things follow from that, and each was learned the hard way:
+
+- It can protect **any format the phone can open** — AVIF and HEIC included, which `package:image` cannot decode at all. Decoding the file independently meant the app could display and analyse a photo it then refused to protect.
+- A **palette (indexed-colour) PNG cannot silently defeat it.** In such an image a pixel holds an index, not a colour, so writing RGB into one changes nothing — redaction reported success and altered not a single pixel. There is no palette left by the time the engine sees the data.
+- The pixels being edited are **byte-for-byte the ones the detectors measured**, so the two can never disagree about EXIF rotation.
 
 ### The invariant that matters
 
@@ -143,6 +157,7 @@ The overlay avoids letterbox maths entirely by forcing the image container to th
 | QR / barcodes | `google_mlkit_barcode_scanning` | Handles every common format, decodes the payload |
 | Sensitive text | Regex + Luhn (hand-written) | Readable, testable, explainable |
 | Image picking | `image_picker` | Gallery + camera, uses the Android photo picker |
+| Redaction | `image` | Pure Dart, so the pixel work runs in an isolate |
 | Preferences | `shared_preferences` | Theme choice only |
 | Backend | **None** | See below |
 
@@ -209,7 +224,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-16 tests, all running **in memory with no emulator**, in about a second.
+24 tests, all running **in memory with no emulator**, in about a second.
 
 **Unit tests (`test/sensitive_text_test.dart`)** cover the part most likely to be wrong and cheapest to check — the rules. Positive cases for every pattern, plus the negatives that matter:
 
@@ -241,7 +256,9 @@ Detector robustness has not been measured systematically yet. Flat, well-lit QR 
 
 These are measured, not hypothetical.
 
-- **Redaction does not exist yet.** The app finds and reviews; it cannot yet produce a protected copy. That is the next phase.
+- **Blur and pixelation are weaker than blackout.** Both are lossy but not destructive, and against a short, guessable value such as a phone number they are a softer guarantee than a solid block. That is why text defaults to blackout and only faces default to blur. An early blur radius left phone numbers readable in testing; it is now far more aggressive, and a test pins that strength.
+- **The protected copy is always re-encoded from raw pixels**, so a palette PNG comes back as a full-colour PNG and is larger than the original, and an AVIF or HEIC input comes back as JPEG. Correctness and format support over file size.
+- **The protected copy cannot be saved or shared yet.** It is rendered and displayed, but writing it to the gallery or handing it to the share sheet is the next phase.
 - **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Manual redaction (planned) is the escape hatch.
 - **Address detection is shallow.** A regex for "number + street name + suffix" catches common US-style addresses and will miss most international formats.
 - **Phone-number detection is US-centric** and will flag some non-phone digit sequences of the right shape. This is why every finding is labelled *potential* and is reviewable.
@@ -254,10 +271,10 @@ These are measured, not hypothetical.
 ## Roadmap
 
 **Next — v1 completion**
-1. Redaction engine: blur, pixelate, blackout, rendered **once** from the original plus the list of instructions rather than by repeatedly re-editing a JPEG
-2. Heavy pixel work moved off the main thread so the UI does not freeze on large photos
-3. Manual drag-to-redact for anything the detectors miss
-4. Save to gallery and share via the system share sheet
+1. Manual drag-to-redact for anything the detectors miss
+2. Save to gallery and share via the system share sheet
+
+The redaction engine itself is done: blur, pixelate and blackout, rendered **once** from the original plus the list of instructions rather than by re-editing a JPEG, and run in an isolate so the UI never freezes.
 
 **Later**
 - Licence-plate detection with a YOLO model

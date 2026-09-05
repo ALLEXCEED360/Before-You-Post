@@ -5,10 +5,12 @@ import 'package:flutter/material.dart';
 
 import '../models/privacy_finding.dart';
 import '../services/privacy_engine.dart';
+import '../services/redaction_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/detection_overlay.dart';
 import '../widgets/fade_slide_in.dart';
 import '../widgets/finding_card.dart';
+import 'result_screen.dart';
 
 /// Screen 4 of 5: the editor (outline section 19).
 ///
@@ -31,11 +33,14 @@ class EditorScreen extends StatefulWidget {
 }
 
 class _EditorScreenState extends State<EditorScreen> {
+  final RedactionService _redaction = RedactionService();
+
   /// A mutable copy. The scan result itself stays untouched, so we can
   /// always tell what was detected versus what the user chose.
   late List<PrivacyFinding> _findings = List.of(widget.scan.findings);
 
   bool _showAllText = false;
+  bool _protecting = false;
 
   int get _hiddenCount => _findings.where((f) => f.selected).length;
 
@@ -45,12 +50,52 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
+  void _setMethod(int index, RedactionMethod method) {
+    setState(() {
+      _findings[index] = _findings[index].copyWith(redaction: method);
+    });
+  }
+
   void _setAll(bool selected) {
     setState(() {
       _findings = [
         for (final finding in _findings) finding.copyWith(selected: selected),
       ];
     });
+  }
+
+  Future<void> _protect() async {
+    if (_protecting) return;
+    setState(() => _protecting = true);
+
+    try {
+      // Rendered from the ORIGINAL file plus the current instruction
+      // list, never from a previous result (outline section 14).
+      final bytes = await _redaction.redact(
+        imagePath: widget.imagePath,
+        // The pixels already on screen. Redacting the same buffer the
+        // detectors measured is what keeps the boxes and the redaction in
+        // one coordinate space, whatever the file format was.
+        image: widget.image,
+        findings: _findings,
+      );
+
+      if (!mounted) return;
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              ResultScreen(imageBytes: bytes, hiddenCount: _hiddenCount),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not protect this image: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _protecting = false);
+    }
   }
 
   @override
@@ -121,8 +166,11 @@ class _EditorScreenState extends State<EditorScreen> {
             child: _ReviewPanel(
               findings: _findings,
               hiddenCount: _hiddenCount,
+              protecting: _protecting,
               onSelectedChanged: _setSelected,
+              onMethodChanged: _setMethod,
               onSetAll: _setAll,
+              onProtect: _protect,
             ),
           ),
         ],
@@ -135,14 +183,20 @@ class _ReviewPanel extends StatelessWidget {
   const _ReviewPanel({
     required this.findings,
     required this.hiddenCount,
+    required this.protecting,
     required this.onSelectedChanged,
+    required this.onMethodChanged,
     required this.onSetAll,
+    required this.onProtect,
   });
 
   final List<PrivacyFinding> findings;
   final int hiddenCount;
+  final bool protecting;
   final void Function(int index, bool selected) onSelectedChanged;
+  final void Function(int index, RedactionMethod method) onMethodChanged;
   final ValueChanged<bool> onSetAll;
+  final VoidCallback onProtect;
 
   @override
   Widget build(BuildContext context) {
@@ -209,21 +263,30 @@ class _ReviewPanel extends StatelessWidget {
                             finding: findings[index],
                             onSelectedChanged: (value) =>
                                 onSelectedChanged(index, value),
+                            onMethodChanged: (method) =>
+                                onMethodChanged(index, method),
                           ),
                         ),
                       ),
                     ),
                     FilledButton.icon(
-                      // Redaction is the next phase. A button that
-                      // silently does nothing is worse than one that is
-                      // visibly not ready yet.
-                      onPressed: null,
-                      icon: const Icon(Icons.auto_fix_high),
-                      label: Text(
-                        hiddenCount == 0
-                            ? 'Nothing selected to hide'
-                            : 'Protect image ($hiddenCount)',
-                      ),
+                      // Disabled with nothing selected: a button that
+                      // produces an identical copy is not an action.
+                      onPressed: hiddenCount == 0 || protecting
+                          ? null
+                          : onProtect,
+                      icon: protecting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_fix_high),
+                      label: Text(switch ((protecting, hiddenCount)) {
+                        (true, _) => 'Protecting...',
+                        (false, 0) => 'Nothing selected to hide',
+                        (false, final count) => 'Protect image ($count)',
+                      }),
                     ),
                   ],
                 ),
