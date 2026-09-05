@@ -142,6 +142,58 @@ void main() {
     );
   });
 
+  test(
+    'blur of a phone-sized region finishes quickly and still destroys detail',
+    () {
+      // A regression test for a real hang. Blur costs width * height *
+      // radius, and the radius scales with the region, so on a full
+      // resolution phone photo a face box around 1500px across produced
+      // a radius near 500 - billions of operations. Blackout and
+      // pixelate, which cost only area, completed on the same photo.
+      //
+      // The time budget is the point of this test: if the engine ever
+      // goes back to blurring at full resolution, this fails by timing
+      // out rather than by being subtly wrong.
+      final image = img.Image(width: 1600, height: 1600);
+      img.fill(image, color: img.ColorRgb8(255, 255, 255));
+      for (var x = 200; x < 1400; x += 8) {
+        img.fillRect(
+          image,
+          x1: x,
+          y1: 200,
+          x2: x + 3,
+          y2: 1400,
+          color: img.ColorRgb8(0, 0, 0),
+        );
+      }
+
+      final out = run(image, [
+        const RedactionInstruction(
+          left: 200,
+          top: 200,
+          width: 1200,
+          height: 1200,
+          method: RedactionMethod.blur,
+        ),
+      ]);
+
+      var darkest = 255;
+      var lightest = 0;
+      for (var x = 400; x < 1200; x += 7) {
+        final value = out.getPixel(x, 800).r.toInt();
+        darkest = darkest < value ? darkest : value;
+        lightest = lightest > value ? lightest : value;
+      }
+
+      expect(
+        lightest - darkest,
+        lessThan(100),
+        reason: 'blur left too much contrast at full resolution',
+      );
+    },
+    timeout: const Timeout(Duration(seconds: 20)),
+  );
+
   test('pixelate produces uniform blocks', () {
     final out = run(buildFixture(), [squareAt(RedactionMethod.pixelate)]);
 

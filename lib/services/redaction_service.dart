@@ -205,7 +205,43 @@ void _apply(img.Image image, RedactionInstruction instruction) {
       // are short, so a fraction of an already-small height is not
       // enough. Verified visually, not guessed.
       final radius = math.max(8, (math.min(width, height) / 3).round());
-      final blurred = img.gaussianBlur(region, radius: radius);
+
+      // Blur costs width * height * radius, and BOTH grow with the image.
+      // On a phone selfie a face box can be 1500px across, giving a
+      // radius near 500 - billions of operations, which in practice
+      // hangs. Blackout and pixelate cost only area, which is why they
+      // survived the same photo and blur did not.
+      //
+      // So blur a downscaled copy and scale it back up. The result is
+      // meant to be an unreadable smear, so the resolution thrown away
+      // was never going to be visible - and the downscale destroys fine
+      // detail too, which for this purpose is a bonus.
+      const maxWorkingSide = 256;
+      final shortest = math.min(width, height);
+
+      final img.Image blurred;
+      if (shortest > maxWorkingSide) {
+        final scale = maxWorkingSide / shortest;
+        final small = img.copyResize(
+          region,
+          width: math.max(1, (width * scale).round()),
+          height: math.max(1, (height * scale).round()),
+          interpolation: img.Interpolation.average,
+        );
+        final smallBlur = img.gaussianBlur(
+          small,
+          radius: math.max(4, (radius * scale).round()),
+        );
+        blurred = img.copyResize(
+          smallBlur,
+          width: width,
+          height: height,
+          interpolation: img.Interpolation.linear,
+        );
+      } else {
+        blurred = img.gaussianBlur(region, radius: radius);
+      }
+
       img.compositeImage(image, blurred, dstX: paddedLeft, dstY: paddedTop);
 
     case RedactionMethod.pixelate:

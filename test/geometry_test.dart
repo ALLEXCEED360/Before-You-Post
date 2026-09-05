@@ -85,7 +85,10 @@ void main() {
     });
 
     test('a zero-sized widget does not divide by zero', () {
-      expect(screenToImage(const Offset(10, 10), Size.zero, image), Offset.zero);
+      expect(
+        screenToImage(const Offset(10, 10), Size.zero, image),
+        Offset.zero,
+      );
     });
   });
 }
