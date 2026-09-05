@@ -1,7 +1,31 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Release signing.
+//
+// The keystore and its passwords live in android/key.properties, which is
+// gitignored and must never be committed - see key.properties.example for
+// the format. Losing the keystore means never being able to update the app
+// on Play under this listing again, so back it up somewhere durable.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+val keystoreProperties = Properties().apply {
+    if (hasReleaseKeystore) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+
+if (!hasReleaseKeystore) {
+    logger.warn(
+        "No android/key.properties found - release builds will be signed " +
+            "with the DEBUG key and cannot be uploaded to Google Play."
+    )
 }
 
 android {
@@ -29,11 +53,31 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Falls back to the debug key when no keystore is configured,
+            // so a fresh clone can still build and run in release mode.
+            //
+            // The warning above only reaches the terminal with
+            // `flutter build -v`, so do not rely on spotting it. The real
+            // safety net is that Play rejects debug-signed uploads: this
+            // fails at upload rather than shipping something unsignable.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
 
             // Without these, R8 aborts the release build over ML Kit text
             // recognisers for scripts this app does not use, and then -

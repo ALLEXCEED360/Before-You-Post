@@ -1,0 +1,12 @@
+# Copy this file to android/key.properties and fill in your own values.
+#
+# key.properties is gitignored and must never be committed - it holds the
+# passwords to your upload keystore. So is the .jks itself.
+#
+# storeFile may be an absolute path. Keeping the keystore OUTSIDE the repo
+# entirely is the safest option, so it cannot be committed by accident.
+
+storePassword=your-keystore-password
+keyPassword=your-key-password
+keyAlias=upload
+storeFile=C:/Users/you/keys/before-you-post-upload.jks
