@@ -1,7 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/privacy_finding.dart';
 import '../theme/app_theme.dart';
+import 'finding_style.dart';
 
 /// Draws a numbered box around each finding.
 ///
@@ -70,14 +73,6 @@ class _FindingBoxPainter extends CustomPainter {
   final String? highlightedId;
   final List<Rect> debugTextBounds;
 
-  Color _colorFor(FindingType type) => switch (type) {
-    FindingType.face => scheme.primary,
-    FindingType.qrCode => scheme.tertiary,
-    FindingType.manual => scheme.secondary,
-    // Every text-derived risk shares the alarm colour.
-    _ => riskColor,
-  };
-
   @override
   void paint(Canvas canvas, Size size) {
     if (imageSize.isEmpty) return;
@@ -110,7 +105,7 @@ class _FindingBoxPainter extends CustomPainter {
 
     for (final (index, finding) in findings.indexed) {
       final rect = toScreen(finding.bounds);
-      final color = _colorFor(finding.type);
+      final color = colorForFinding(finding.type, scheme, riskColor);
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(6));
       final isHighlighted = finding.id == highlightedId;
 
@@ -160,7 +155,7 @@ class _FindingBoxPainter extends CustomPainter {
         );
       }
 
-      _drawBadge(canvas, rect, index + 1, color, isHighlighted, fade);
+      _drawBadge(canvas, size, rect, index + 1, color, isHighlighted, fade);
     }
   }
 
@@ -170,6 +165,7 @@ class _FindingBoxPainter extends CustomPainter {
   /// A number on both the box and the card is what makes them one thing.
   void _drawBadge(
     Canvas canvas,
+    Size size,
     Rect rect,
     int number,
     Color color,
@@ -177,33 +173,51 @@ class _FindingBoxPainter extends CustomPainter {
     double fade,
   ) {
     final radius = isHighlighted ? 16.0 : 11.0;
+    const gap = 3.0;
 
-    // Sit the badge just outside the top-left corner, but pull it back
-    // inside when the box is near the edge of the image.
-    final centre = Offset(
-      rect.left.clamp(radius, double.infinity),
-      rect.top.clamp(radius, double.infinity),
+    // Keep the badge OUTSIDE the box it labels. Sitting it on the corner
+    // covered the first character of every flagged phone number, email
+    // and address - the badge hid the very thing it was pointing at.
+    //
+    // Prefer the left edge, because findings that stack vertically (lines
+    // of text) have room beside them but not above. Fall back to above,
+    // then inside, when the box is against an edge of the image.
+    final Offset centre;
+    if (rect.left - radius - gap >= 0) {
+      centre = Offset(rect.left - radius - gap, rect.center.dy);
+    } else if (rect.top - radius - gap >= 0) {
+      centre = Offset(rect.left + radius, rect.top - radius - gap);
+    } else {
+      centre = Offset(rect.left + radius + gap, rect.top + radius + gap);
+    }
+
+    // Never let it fall off the edge of the canvas.
+    final clamped = Offset(
+      centre.dx.clamp(radius, math.max(radius, size.width - radius)),
+      centre.dy.clamp(radius, math.max(radius, size.height - radius)),
     );
 
     canvas.drawCircle(
-      centre,
+      clamped,
       radius,
       Paint()..color = color.withValues(alpha: fade),
     );
+    final ink = onFindingColor(color);
+
     canvas.drawCircle(
-      centre,
+      clamped,
       radius,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2
-        ..color = Colors.white.withValues(alpha: 0.9 * fade),
+        ..color = ink.withValues(alpha: 0.9 * fade),
     );
 
     final painter = TextPainter(
       text: TextSpan(
         text: '$number',
         style: TextStyle(
-          color: Colors.white.withValues(alpha: fade),
+          color: ink.withValues(alpha: fade),
           fontSize: radius,
           fontWeight: FontWeight.w700,
           height: 1,
@@ -214,7 +228,7 @@ class _FindingBoxPainter extends CustomPainter {
 
     painter.paint(
       canvas,
-      centre - Offset(painter.width / 2, painter.height / 2),
+      clamped - Offset(painter.width / 2, painter.height / 2),
     );
   }
 

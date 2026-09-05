@@ -4,34 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../models/privacy_finding.dart';
 import '../theme/app_theme.dart';
+import 'finding_style.dart';
 import 'region_thumbnail.dart';
-
-/// Icon for each kind of finding.
-///
-/// Lives in the widget layer, not the model: PrivacyFinding is plain data
-/// and should not depend on Flutter.
-IconData iconForFinding(FindingType type) => switch (type) {
-  FindingType.face => Icons.face_outlined,
-  FindingType.phoneNumber => Icons.phone_outlined,
-  FindingType.email => Icons.alternate_email,
-  FindingType.url => Icons.link,
-  FindingType.cardNumber => Icons.credit_card,
-  FindingType.address => Icons.home_outlined,
-  FindingType.qrCode => Icons.qr_code_2,
-  FindingType.manual => Icons.crop_square,
-};
-
-IconData iconForMethod(RedactionMethod method) => switch (method) {
-  RedactionMethod.blur => Icons.blur_on,
-  RedactionMethod.pixelate => Icons.grid_view,
-  RedactionMethod.blackout => Icons.square_rounded,
-};
-
-String labelForMethod(RedactionMethod method) => switch (method) {
-  RedactionMethod.blur => 'Blur',
-  RedactionMethod.pixelate => 'Pixelate',
-  RedactionMethod.blackout => 'Blackout',
-};
 
 /// One row in the findings list (outline sections 13, 14 and 18).
 ///
@@ -72,9 +46,7 @@ class FindingCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final semantics = context.semantics;
 
-    final accent = finding.type == FindingType.face
-        ? scheme.primary
-        : semantics.risk;
+    final accent = colorForFinding(finding.type, scheme, semantics.risk);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -219,14 +191,14 @@ class _NumberedThumbnail extends StatelessWidget {
                 color: color,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: onFindingColor(color).withValues(alpha: 0.9),
                   width: 1.5,
                 ),
               ),
               child: Text(
                 '$number',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: onFindingColor(color),
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   height: 1,

@@ -16,12 +16,12 @@ Built with Flutter and Google ML Kit. No backend, no accounts, no image uploads.
 | Findings — text | Findings — QR | Dark theme |
 |:---:|:---:|:---:|
 | ![Text findings](docs/screenshots/editor-text.png) | ![QR finding](docs/screenshots/editor-qr.png) | ![Dark theme](docs/screenshots/home-dark.png) |
-| Tight boxes on exactly the sensitive spans | Decoded payload shown so you can judge it | Every screen themed from the same tokens |
+| Numbered boxes on exactly the sensitive spans | Decoded payload shown so you can judge it | Every screen themed from the same tokens |
 
 | Picking one of many | The protected copy |
 |:---:|:---:|
 | ![Redaction methods](docs/screenshots/editor-methods.png) | ![Protected result](docs/screenshots/result.png) |
-| Numbered boxes, region thumbnails, blur/pixelate/blackout per finding | Rendered once from the original |
+| Tapping face 8 dims the other 19 and scrolls to its card | Rendered once from the original |
 
 > The findings screenshots use a deliberate test image. The six items under **SHOULD BE FLAGGED** are all caught; the three under **SHOULD NOT BE FLAGGED** are all correctly ignored, including a 16-digit order number that fails the Luhn check. In the protected copy, note that "Call me at" and "Card" survive — only the sensitive spans are hidden, not the whole line.
 
@@ -124,6 +124,7 @@ lib/
 └── widgets/
     ├── detection_overlay.dart       Draws the numbered boxes
     ├── finding_card.dart            One reviewable finding
+    ├── finding_style.dart           Icon and colour per finding type
     ├── region_thumbnail.dart        Crop of a finding, for its card
     └── fade_slide_in.dart           Staggered entrance animation
 ```

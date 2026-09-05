@@ -62,14 +62,27 @@ class _RegionPainter extends CustomPainter {
 
     if (bounds.isEmpty) return;
 
-    // Take a SQUARE source region centred on the finding, slightly larger
-    // than the finding itself. A phone-number box is a thin wide strip;
-    // stretching that into a square thumbnail would be unreadable, and a
-    // little surrounding context is what makes a face recognisable.
-    final side = math.max(bounds.width, bounds.height) * 1.25;
+    // A SQUARE source region centred on the finding, sized from the
+    // finding's SHORTER side.
+    //
+    // Sizing from the longer side seems more natural and is wrong: a
+    // phone-number box is a wide thin strip, so a square that covers its
+    // width also swallows the three findings above and below it, and the
+    // thumbnail ends up showing everything except the thing it labels.
+    // Sizing from the shorter side keeps the crop inside the finding -
+    // a face gets useful context, a text strip gets a zoomed piece of
+    // itself, and neither borrows its neighbours.
+    final side = math.max(bounds.shortestSide * 1.5, 12.0);
     final centre = bounds.center;
 
-    var left = centre.dx - side / 2;
+    // For a wide strip, anchor the crop at its START rather than its
+    // middle. The first characters of a phone number or an address
+    // identify it; the middle two characters do not.
+    final anchorX = bounds.width > bounds.height * 1.5
+        ? bounds.left + side / 2
+        : centre.dx;
+
+    var left = anchorX - side / 2;
     var top = centre.dy - side / 2;
 
     // Keep the square inside the image rather than sampling past its edge.
