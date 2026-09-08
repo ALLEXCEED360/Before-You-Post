@@ -46,6 +46,28 @@ void main() {
     expect(findings.single.bounds, const Rect.fromLTRB(0, 100, 410, 130));
   });
 
+  test('rejoins a card split into two halves', () {
+    // ML Kit's line grouping is proximity-based and inconsistent: the
+    // same card comes back as four groups on one photo and two halves
+    // on another. A rule that only understood single groups would fix
+    // one of those and not the other.
+    final findings = detector.detect([
+      OcrLine(
+        text: '4111 1111',
+        bounds: const Rect.fromLTWH(0, 100, 190, 30),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: '1111 1111',
+        bounds: const Rect.fromLTWH(220, 100, 190, 30),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings.single.type, FindingType.cardNumber);
+    expect(findings.single.bounds, const Rect.fromLTRB(0, 100, 410, 130));
+  });
+
   test('does not join groups that fail Luhn', () {
     // Without the checksum this whole approach would invent card numbers
     // out of any row of numbers - a table of prices, a spreadsheet.

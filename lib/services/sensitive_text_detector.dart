@@ -55,11 +55,24 @@ class SensitiveTextDetector {
     List<OcrLine> lines,
     int startIndex,
   ) {
-    final groupPattern = RegExp(r"^\d{3,6}$");
+    // Digits, spaces and dashes only - no letters, no other punctuation.
+    //
+    // Deliberately not "exactly one group of four". ML Kit's line
+    // grouping is proximity-based and inconsistent about where it
+    // breaks: the same card can come back as four groups, or as two
+    // halves of eight digits, or as three and one. Accepting any run of
+    // digits covers all of those.
+    final groupPattern = RegExp(r"^[\d\s-]+$");
 
     final candidates = [
       for (final line in lines)
-        if (groupPattern.hasMatch(line.text.trim())) line,
+        if (groupPattern.hasMatch(line.text.trim()) &&
+            // Thirteen digits or more is a whole card number, which the
+            // per-line rules already handle. Excluding it here is what
+            // stops the same card being reported twice.
+            digitsOnly(line.text).length >= 3 &&
+            digitsOnly(line.text).length < 13)
+          line,
     ];
     // One group on its own can never reach thirteen digits.
     if (candidates.length < 2) return const [];
@@ -111,7 +124,7 @@ class SensitiveTextDetector {
             if (gap > height * 3) break;
           }
 
-          digits.write(row[j].text.trim());
+          digits.write(digitsOnly(row[j].text));
           bounds = bounds.expandToInclude(row[j].bounds);
 
           if (digits.length > 19) break;
