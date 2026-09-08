@@ -165,17 +165,33 @@ final RegExp securityCodePattern = RegExp(
   caseSensitive: false,
 );
 
-/// The same label, alone on its line.
+/// The same label, on a line of its own.
 ///
 /// OCR frequently puts the label and the digits on separate lines,
 /// because on a card they are set apart. [securityCodePattern] cannot
 /// see those; the detector pairs them up by position instead.
+///
+/// Deliberately unanchored. Requiring the line to be nothing but the
+/// label was too strict: cards print "SECURITY CODE" with a colon,
+/// alongside a brand mark, or wrapped so the words carry other fragments
+/// with them, and any of those made the label invisible. The
+/// abbreviations still need word boundaries, since three letters loose
+/// in a sentence are not a label.
 final RegExp securityCodeLabelPattern = RegExp(
-  r"^(?:CVV2?|CVC2?|CVN|CID|CSC"
-  r"|security\s*code|card\s*(?:verification|security)\s*(?:code|value|number))"
-  r"\s*[:#-]?$",
+  r"\b(?:CVV2?|CVC2?|CVN|CID|CSC)\b"
+  r"|security\s*code"
+  r"|card\s*(?:verification|security)\s*(?:code|value|number)",
   caseSensitive: false,
 );
+
+/// Half of a two-word label, for when OCR splits it.
+///
+/// A card commonly stacks "SECURITY" above "CODE" in small print, and ML
+/// Kit returns each as its own line. Neither half is a label on its own -
+/// "code" in particular is far too common - so the detector only treats
+/// them as one when it finds both, close together.
+final RegExp securityWordPattern = RegExp(r"^security$", caseSensitive: false);
+final RegExp codeWordPattern = RegExp(r"^code$", caseSensitive: false);
 
 /// A bare three or four digit group - a security code candidate, but
 /// only ever when a label sits next to it.

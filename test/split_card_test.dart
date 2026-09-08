@@ -177,4 +177,83 @@ void main() {
 
     expect(findings, isEmpty);
   });
+
+  test('pairs a code with a SECURITY CODE label on one line', () {
+    final findings = detector.detect([
+      OcrLine(
+        text: 'SECURITY CODE',
+        bounds: const Rect.fromLTWH(0, 100, 140, 24),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: '456',
+        bounds: const Rect.fromLTWH(160, 100, 50, 24),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings.single.type, FindingType.securityCode);
+    expect(findings.single.bounds, const Rect.fromLTWH(160, 100, 50, 24));
+  });
+
+  test('pairs a code with a label OCR split into two words', () {
+    // A card stacks "SECURITY" above "CODE" in small print, and ML Kit
+    // returns each as its own line. Neither half is a label alone.
+    final findings = detector.detect([
+      OcrLine(
+        text: 'SECURITY',
+        bounds: const Rect.fromLTWH(0, 100, 90, 20),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: 'CODE',
+        bounds: const Rect.fromLTWH(0, 124, 60, 20),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: '789',
+        bounds: const Rect.fromLTWH(110, 112, 50, 20),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings.single.type, FindingType.securityCode);
+    expect(findings.single.bounds, const Rect.fromLTWH(110, 112, 50, 20));
+  });
+
+  test('the word "code" alone is not a label', () {
+    // "code" is far too common to stand on its own - promo codes, error
+    // codes, area codes. Only both halves together count.
+    final findings = detector.detect([
+      OcrLine(
+        text: 'CODE',
+        bounds: const Rect.fromLTWH(0, 100, 60, 20),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: '404',
+        bounds: const Rect.fromLTWH(70, 100, 50, 20),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings, isEmpty);
+  });
+
+  test('a labelled code on one line is reported once, not twice', () {
+    // The same-line rule and the pairing pass can both see this. Only
+    // one finding should come out.
+    final findings = detector.detect([
+      OcrLine(
+        text: 'CVV 123',
+        bounds: const Rect.fromLTWH(0, 100, 120, 24),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(
+      findings.where((f) => f.type == FindingType.securityCode),
+      hasLength(1),
+    );
+  });
 }

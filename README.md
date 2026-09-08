@@ -98,7 +98,7 @@ It also does a second job. ML Kit groups text into lines by proximity, and a car
 
 Detector ordering is load-bearing: a 16-digit card number **also** satisfies the phone-number pattern, so cards are tested first. There is a test pinning that behaviour so a future reorder fails loudly.
 
-Security codes are the opposite case, and the one place where structure runs out entirely. Three digits have no shape: they are a price, a page number, a year, a quantity. Nothing distinguishes a card's security code from any of those except the word printed beside it, so the label **is** the rule — and because a card sets the label apart from the digits, OCR usually returns them as two separate lines. They are paired by position, and the box covers the digits rather than the label, since hiding the word "CVV" protects nothing. An unlabelled code is out of reach rather than merely difficult.
+Security codes are the opposite case, and the one place where structure runs out entirely. Three digits have no shape: they are a price, a page number, a year, a quantity. Nothing distinguishes a card's security code from any of those except the word printed beside it, so the label **is** the rule — and because a card sets the label apart from the digits, OCR usually returns them as two separate lines. They are paired by position, and the box covers the digits rather than the label, since hiding the word "CVV" protects nothing. An unlabelled code is out of reach rather than merely difficult. The label matching is unanchored and also reassembles a "SECURITY" / "CODE" pair that OCR has split across two lines, because a card that prints the words stacked in small print produces exactly that — and neither half counts alone, "code" least of all.
 
 Credentials are the highest-value thing in this list and the easiest to match, because the formats are issued rather than written: nothing in ordinary prose begins `AKIA` and continues for exactly sixteen more capitals. Provider prefixes cover AWS, Google, GitHub, Slack, Stripe, OpenAI and Anthropic keys, plus JWTs and PEM private-key headers. A second rule catches the formatless case — `API_KEY=...` in a screenshot of an `.env` file or a terminal — where the value is indistinguishable from noise and only the label says it matters. That rule uses a **lookbehind rather than ``**, because an underscore is a word character and `` never fires between `DB_` and `PASSWORD`, which silently missed every environment variable. A secret is also the one finding whose matched text is **not** shown in the review list; printing the key on screen would defeat the point of finding it.
 
@@ -250,7 +250,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-62 tests, all running **in memory with no emulator**, in about two seconds.
+66 tests, all running **in memory with no emulator**, in about two seconds.
 
 **Detector tests (`test/split_card_test.dart`)** describe ML Kit results by hand. `OcrLine` is plain data, so a result the app cannot easily produce on demand — a card number the recogniser has broken into four lines — can simply be written down, along with the geometry that makes rejoining it correct or wrong.
 

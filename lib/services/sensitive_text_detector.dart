@@ -36,6 +36,48 @@ class SensitiveTextDetector {
     return findings;
   }
 
+  /// Every place a security-code label appears, as boxes.
+  ///
+  /// Two shapes, because OCR produces both. A whole label on one line is
+  /// the easy case. The other is a card that stacks "SECURITY" above
+  /// "CODE" in small print, which comes back as two lines - and neither
+  /// half is a label by itself, "code" least of all. So the halves only
+  /// count when both are present and close together.
+  ///
+  /// A line carrying digits of its own is skipped: the same-line rule
+  /// has already reported that one, and pairing it again would produce
+  /// two findings for a single code.
+  List<Rect> _securityCodeLabels(List<OcrLine> lines) {
+    final labels = <Rect>[];
+    final digits = RegExp(r"\d{3,4}");
+
+    for (final line in lines) {
+      if (digits.hasMatch(line.text)) continue;
+      if (securityCodeLabelPattern.hasMatch(line.text.trim())) {
+        labels.add(line.bounds);
+      }
+    }
+
+    final securityWords = [
+      for (final line in lines)
+        if (securityWordPattern.hasMatch(line.text.trim())) line,
+    ];
+    final codeWords = [
+      for (final line in lines)
+        if (codeWordPattern.hasMatch(line.text.trim())) line,
+    ];
+
+    for (final security in securityWords) {
+      for (final code in codeWords) {
+        final apart = (security.bounds.center - code.bounds.center).distance;
+        if (apart > security.bounds.height * 4) continue;
+        labels.add(security.bounds.expandToInclude(code.bounds));
+      }
+    }
+
+    return labels;
+  }
+
   /// A security code whose label OCR put on a different line.
   ///
   /// On a card the label and the digits are set apart, so ML Kit
@@ -52,10 +94,7 @@ class SensitiveTextDetector {
     List<OcrLine> lines,
     int startIndex,
   ) {
-    final labels = [
-      for (final line in lines)
-        if (securityCodeLabelPattern.hasMatch(line.text.trim())) line,
-    ];
+    final labels = _securityCodeLabels(lines);
     if (labels.isEmpty) return const [];
 
     final values = [
@@ -74,11 +113,11 @@ class SensitiveTextDetector {
       for (final value in values) {
         if (claimed.contains(value)) continue;
 
-        final distance = (value.bounds.center - label.bounds.center).distance;
+        final distance = (value.bounds.center - label.center).distance;
         // Within a few line-heights. A label and its code are printed
         // together; anything further away is a different number that
         // happens to be three digits long.
-        if (distance > label.bounds.height * 6) continue;
+        if (distance > label.height * 6) continue;
 
         if (distance < nearestDistance) {
           nearest = value;
