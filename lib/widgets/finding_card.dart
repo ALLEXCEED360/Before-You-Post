@@ -70,7 +70,7 @@ class FindingCard extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,
-            vertical: AppSpacing.sm,
+            vertical: 6,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -147,8 +147,8 @@ class FindingCard extends StatelessWidget {
                 child: finding.selected
                     ? Padding(
                         padding: const EdgeInsets.only(
-                          top: AppSpacing.sm,
-                          bottom: AppSpacing.xs,
+                          top: AppSpacing.xs,
+                          bottom: 2,
                         ),
                         child: _MethodPicker(
                           value: finding.redaction,
@@ -243,7 +243,7 @@ class _MethodPicker extends StatelessWidget {
         // icon. Stacked, the word needs that width more than the padding
         // does.
         padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 6),
+          EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 4),
         ),
       ),
       segments: [

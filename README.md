@@ -242,7 +242,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-41 tests, all running **in memory with no emulator**, in about two seconds.
+42 tests, all running **in memory with no emulator**, in about two seconds.
 
 **Unit tests (`test/sensitive_text_test.dart`)** cover the part most likely to be wrong and cheapest to check — the rules. Positive cases for every pattern, plus the negatives that matter:
 
@@ -256,6 +256,9 @@ flutter test
 - dark mode renders without throwing
 - the layout survives **2.0× system text scale**, roughly Android's maximum accessibility font size
 - the three redaction-method labels stay on one line in a narrow card at 1.3× text scale
+- a whole finding card fits inside the review panel on a 360×740 screen
+
+The panel-height test exists for the same reason. The editor used a fixed 3:2 split between photo and review panel, and on a shorter phone 40% was no longer enough for a single card — a tester's screenshot showed one card clipped through its own thumbnail. The panel is now sized by its content up to a ceiling, and the test asserts the first card sits entirely inside the viewport. It fails against the old split by 66px, which is the point of writing it that way round.
 
 The method-label test exists because that one shipped: on a narrower phone than the one this was developed on, "Pixelate" and "Blackout" each broke across two lines mid-word. Nothing threw — text wrapping is legal layout — so the test measures the rendered height instead of watching for an exception.
 

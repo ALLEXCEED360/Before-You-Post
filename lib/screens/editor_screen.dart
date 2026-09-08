@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -268,144 +269,165 @@ class _EditorScreenState extends State<EditorScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            flex: 3,
-            child: AnimatedContainer(
-              duration: AppMotion.fast,
-              // Draw mode changes what dragging on the photo does, so it
-              // has to be visible ON the photo. Panning suddenly drawing
-              // a box is alarming if nothing said the mode had changed.
-              decoration: BoxDecoration(
-                color: context.semantics.canvas,
-                border: Border.all(
-                  color: _drawMode
-                      ? Theme.of(context).colorScheme.secondary
-                      : Colors.transparent,
-                  width: 2,
-                ),
-              ),
-              child: InteractiveViewer(
-                // Panning and drawing are the same gesture. While the
-                // draw tool is on, the viewer has to keep its hands off
-                // or every attempt to draw a box scrolls the photo.
-                panEnabled: !_drawMode,
-                scaleEnabled: !_drawMode,
-                child: Center(
-                  // AspectRatio is the trick that keeps the maths honest:
-                  // it sizes this box to the image's exact proportions, so
-                  // the image fills it edge to edge with no letterboxing.
-                  // The overlay then needs one scale factor and no offset.
-                  child: AspectRatio(
-                    aspectRatio: imageSize.width / imageSize.height,
-                    child: LayoutBuilder(
-                      // A Listener, not a GestureDetector. InteractiveViewer
-                      // wraps this subtree and its scale recogniser claims
-                      // the pointer, so a child tap recogniser never fires -
-                      // taps on the photo silently did nothing. Listener
-                      // receives raw pointer events and never competes in
-                      // the gesture arena, so both zooming and tapping work.
-                      builder: (context, constraints) {
-                        final displayed = Size(
-                          constraints.maxWidth,
-                          constraints.maxHeight,
-                        );
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // The panel takes the height its content needs, up to a
+          // ceiling, and the photo takes whatever is left.
+          //
+          // This replaces a fixed 3:2 split, which handed the panel 40%
+          // of the screen whatever was in it. On a shorter phone that
+          // was not enough for even one card: a tester's screenshot
+          // showed the single visible card clipped through its
+          // thumbnail. A proportion cannot adapt to content, and card
+          // height varies with how many findings there are and how
+          // large the system font is, so proportions were the wrong
+          // tool.
+          //
+          // The ceiling exists because the photo is the subject. Past
+          // roughly two thirds the list stops being a companion to the
+          // image and starts replacing it.
+          final panelCeiling = math.max(constraints.maxHeight * 0.62, 240.0);
 
-                        Offset toImage(Offset local) =>
-                            screenToImage(local, displayed, imageSize);
+          return Column(
+            children: [
+              Expanded(
+                child: AnimatedContainer(
+                  duration: AppMotion.fast,
+                  // Draw mode changes what dragging on the photo does, so it
+                  // has to be visible ON the photo. Panning suddenly drawing
+                  // a box is alarming if nothing said the mode had changed.
+                  decoration: BoxDecoration(
+                    color: context.semantics.canvas,
+                    border: Border.all(
+                      color: _drawMode
+                          ? Theme.of(context).colorScheme.secondary
+                          : Colors.transparent,
+                      width: 2,
+                    ),
+                  ),
+                  child: InteractiveViewer(
+                    // Panning and drawing are the same gesture. While the
+                    // draw tool is on, the viewer has to keep its hands off
+                    // or every attempt to draw a box scrolls the photo.
+                    panEnabled: !_drawMode,
+                    scaleEnabled: !_drawMode,
+                    child: Center(
+                      // AspectRatio is the trick that keeps the maths honest:
+                      // it sizes this box to the image's exact proportions, so
+                      // the image fills it edge to edge with no letterboxing.
+                      // The overlay then needs one scale factor and no offset.
+                      child: AspectRatio(
+                        aspectRatio: imageSize.width / imageSize.height,
+                        child: LayoutBuilder(
+                          // A Listener, not a GestureDetector. InteractiveViewer
+                          // wraps this subtree and its scale recogniser claims
+                          // the pointer, so a child tap recogniser never fires -
+                          // taps on the photo silently did nothing. Listener
+                          // receives raw pointer events and never competes in
+                          // the gesture arena, so both zooming and tapping work.
+                          builder: (context, constraints) {
+                            final displayed = Size(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            );
 
-                        return Listener(
-                          behavior: HitTestBehavior.opaque,
-                          onPointerDown: (event) {
-                            _pointerDownAt = event.localPosition;
-                            if (_drawMode) {
-                              _startDraw(toImage(event.localPosition));
-                            }
-                          },
-                          onPointerMove: (event) {
-                            if (!_drawMode) return;
-                            _updateDraw(
-                              toImage(event.localPosition),
-                              imageSize,
+                            Offset toImage(Offset local) =>
+                                screenToImage(local, displayed, imageSize);
+
+                            return Listener(
+                              behavior: HitTestBehavior.opaque,
+                              onPointerDown: (event) {
+                                _pointerDownAt = event.localPosition;
+                                if (_drawMode) {
+                                  _startDraw(toImage(event.localPosition));
+                                }
+                              },
+                              onPointerMove: (event) {
+                                if (!_drawMode) return;
+                                _updateDraw(
+                                  toImage(event.localPosition),
+                                  imageSize,
+                                );
+                              },
+                              onPointerCancel: (_) {
+                                _pointerDownAt = null;
+                                if (_drawMode) _finishDraw();
+                              },
+                              onPointerUp: (event) {
+                                final down = _pointerDownAt;
+                                _pointerDownAt = null;
+
+                                if (_drawMode) {
+                                  _finishDraw();
+                                  return;
+                                }
+
+                                if (down == null) return;
+
+                                // Anything that moved was a pan or a pinch,
+                                // not a tap on a face.
+                                if ((event.localPosition - down).distance >
+                                    12) {
+                                  return;
+                                }
+
+                                _handleImageTap(toImage(event.localPosition));
+                              },
+                              child: Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Hero(
+                                    tag: 'photo',
+                                    child: Image.file(
+                                      File(widget.imagePath),
+                                      fit: BoxFit.fill,
+                                    ),
+                                  ),
+                                  DetectionOverlay(
+                                    findings: _findings,
+                                    imageSize: imageSize,
+                                    highlightedId: _highlightedId,
+                                    draftRect: _draftRect,
+                                    debugTextBounds: _showAllText
+                                        ? [
+                                            for (final line
+                                                in widget.scan.textLines)
+                                              line.bounds,
+                                          ]
+                                        : const [],
+                                  ),
+                                ],
+                              ),
                             );
                           },
-                          onPointerCancel: (_) {
-                            _pointerDownAt = null;
-                            if (_drawMode) _finishDraw();
-                          },
-                          onPointerUp: (event) {
-                            final down = _pointerDownAt;
-                            _pointerDownAt = null;
-
-                            if (_drawMode) {
-                              _finishDraw();
-                              return;
-                            }
-
-                            if (down == null) return;
-
-                            // Anything that moved was a pan or a pinch,
-                            // not a tap on a face.
-                            if ((event.localPosition - down).distance > 12) {
-                              return;
-                            }
-
-                            _handleImageTap(toImage(event.localPosition));
-                          },
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Hero(
-                                tag: 'photo',
-                                child: Image.file(
-                                  File(widget.imagePath),
-                                  fit: BoxFit.fill,
-                                ),
-                              ),
-                              DetectionOverlay(
-                                findings: _findings,
-                                imageSize: imageSize,
-                                highlightedId: _highlightedId,
-                                draftRect: _draftRect,
-                                debugTextBounds: _showAllText
-                                    ? [
-                                        for (final line
-                                            in widget.scan.textLines)
-                                          line.bounds,
-                                      ]
-                                    : const [],
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
-          Flexible(
-            flex: 2,
-            child: _ReviewPanel(
-              findings: _findings,
-              image: widget.image,
-              cardKeys: _cardKeys,
-              highlightedId: _highlightedId,
-              drawMode: _drawMode,
-              onToggleDraw: _toggleDraw,
-              onDeleteFinding: _removeFinding,
-              hiddenCount: _hiddenCount,
-              protecting: _protecting,
-              onSelectedChanged: _setSelected,
-              onMethodChanged: _setMethod,
-              onSetAll: _setAll,
-              onTapFinding: (id) => _highlight(id, scrollToCard: false),
-              onProtect: _protect,
-            ),
-          ),
-        ],
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: panelCeiling),
+                child: _ReviewPanel(
+                  findings: _findings,
+                  image: widget.image,
+                  cardKeys: _cardKeys,
+                  highlightedId: _highlightedId,
+                  drawMode: _drawMode,
+                  onToggleDraw: _toggleDraw,
+                  onDeleteFinding: _removeFinding,
+                  hiddenCount: _hiddenCount,
+                  protecting: _protecting,
+                  onSelectedChanged: _setSelected,
+                  onMethodChanged: _setMethod,
+                  onSetAll: _setAll,
+                  onTapFinding: (id) => _highlight(id, scrollToCard: false),
+                  onProtect: _protect,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -464,6 +486,11 @@ class _ReviewPanel extends StatelessWidget {
             AppSpacing.sm,
           ),
           child: Column(
+            // Sizes to content, which is what lets the photo have the
+            // rest. With the list in a Flexible below, the panel is
+            // exactly as tall as it needs to be until it hits the
+            // ceiling the caller imposes, and only then does it scroll.
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (findings.isNotEmpty)
@@ -501,7 +528,7 @@ class _ReviewPanel extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: AppSpacing.sm),
-              Expanded(
+              Flexible(
                 child: findings.isEmpty
                     ? const _NothingFound()
                     // SingleChildScrollView + Column, not ListView.
@@ -514,44 +541,50 @@ class _ReviewPanel extends StatelessWidget {
                     // found no context and silently did not scroll.
                     // This builds every card. Findings number in the
                     // tens, so that is cheap.
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (final (index, finding)
-                                in findings.indexed) ...[
-                              if (index > 0)
-                                const SizedBox(height: AppSpacing.sm),
-                              FadeSlideIn(
-                                key: ValueKey('anim_${finding.id}'),
-                                // Cap the stagger: past a handful of items
-                                // the delay stops reading as polish and
-                                // starts reading as lag.
-                                delay: Duration(
-                                  milliseconds: 40 * (index.clamp(0, 6)),
+                    // An explicit Scrollbar, because the panel is now
+                    // only as tall as it needs to be and a clipped card
+                    // at the bottom edge is the only other hint that
+                    // there is more below.
+                    : Scrollbar(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              for (final (index, finding)
+                                  in findings.indexed) ...[
+                                if (index > 0)
+                                  const SizedBox(height: AppSpacing.sm),
+                                FadeSlideIn(
+                                  key: ValueKey('anim_${finding.id}'),
+                                  // Cap the stagger: past a handful of items
+                                  // the delay stops reading as polish and
+                                  // starts reading as lag.
+                                  delay: Duration(
+                                    milliseconds: 40 * (index.clamp(0, 6)),
+                                  ),
+                                  offset: 12,
+                                  child: FindingCard(
+                                    key: cardKeys[finding.id],
+                                    finding: finding,
+                                    image: image,
+                                    number: index + 1,
+                                    highlighted: finding.id == highlightedId,
+                                    onSelectedChanged: (value) =>
+                                        onSelectedChanged(index, value),
+                                    onMethodChanged: (method) =>
+                                        onMethodChanged(index, method),
+                                    onTap: () => onTapFinding(finding.id),
+                                    // Only a manual box can be removed -
+                                    // see FindingCard.onDelete.
+                                    onDelete: finding.type == FindingType.manual
+                                        ? () => onDeleteFinding(finding.id)
+                                        : null,
+                                  ),
                                 ),
-                                offset: 12,
-                                child: FindingCard(
-                                  key: cardKeys[finding.id],
-                                  finding: finding,
-                                  image: image,
-                                  number: index + 1,
-                                  highlighted: finding.id == highlightedId,
-                                  onSelectedChanged: (value) =>
-                                      onSelectedChanged(index, value),
-                                  onMethodChanged: (method) =>
-                                      onMethodChanged(index, method),
-                                  onTap: () => onTapFinding(finding.id),
-                                  // Only a manual box can be removed -
-                                  // see FindingCard.onDelete.
-                                  onDelete: finding.type == FindingType.manual
-                                      ? () => onDeleteFinding(finding.id)
-                                      : null,
-                                ),
-                              ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
               ),
@@ -637,9 +670,14 @@ class _NothingFound extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Center(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      // mainAxisSize.min, not a Center. A Center inside the panel's
+      // Flexible expands to fill, which would hold the panel open at
+      // its full height with nothing in it.
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(
             Icons.verified_outlined,

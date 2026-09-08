@@ -3,6 +3,7 @@
 // against accidentally breaking a screen.
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -11,7 +12,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:before_you_post/main.dart';
+import 'package:image/image.dart' as img;
+
 import 'package:before_you_post/models/privacy_finding.dart';
+import 'package:before_you_post/screens/editor_screen.dart';
+import 'package:before_you_post/services/privacy_engine.dart';
 import 'package:before_you_post/theme/app_theme.dart';
 import 'package:before_you_post/widgets/finding_card.dart';
 import 'package:before_you_post/screens/intro_screen.dart';
@@ -204,5 +209,77 @@ void main() {
         reason: '"$label" wrapped onto a second line',
       );
     }
+  });
+
+  testWidgets('a whole finding card fits in the panel on a short screen', (
+    WidgetTester tester,
+  ) async {
+    // The reported bug: on a shorter phone the review panel showed one
+    // card, clipped through its own thumbnail, with no way to tell there
+    // was more below. The panel had a fixed 40% of the screen whatever
+    // it held, and one card no longer fitted in that.
+    //
+    // A 360x740 viewport is a small-but-ordinary Android phone.
+    tester.view.physicalSize = const Size(360, 740);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    late final ui.Image image;
+    await tester.runAsync(() async => image = await solidImage(60, 60));
+    addTearDown(image.dispose);
+
+    // Image.file wants a real file. Sync IO on purpose - an awaited
+    // Future completes on the real event loop, which the fake-async zone
+    // testWidgets runs in never advances.
+    final dir = Directory.systemTemp.createTempSync('byp_editor');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final file = File('${dir.path}/photo.png')
+      ..writeAsBytesSync(img.encodePng(img.Image(width: 60, height: 60)));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: EditorScreen(
+          imagePath: file.path,
+          image: image,
+          scan: PrivacyScan(
+            findings: [
+              for (var i = 0; i < 4; i++)
+                PrivacyFinding(
+                  id: 'f$i',
+                  type: FindingType.face,
+                  bounds: Rect.fromLTWH(i * 10, 0, 10, 10),
+                ),
+            ],
+            textLines: const [],
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    final viewport = tester.getRect(find.byType(Scrollbar));
+    final firstCard = tester.getRect(find.byType(FindingCard).first);
+
+    expect(
+      firstCard.height,
+      greaterThan(0),
+      reason: 'the first card was not laid out at all',
+    );
+    expect(
+      firstCard.bottom,
+      lessThanOrEqualTo(viewport.bottom + 0.5),
+      reason: 'the first card is clipped by the bottom of the panel',
+    );
+    expect(
+      firstCard.top,
+      greaterThanOrEqualTo(viewport.top - 0.5),
+      reason: 'the first card is clipped by the top of the panel',
+    );
+
+    // And the two actions stay reachable whatever the list does.
+    expect(find.text('Hide something myself'), findsOneWidget);
+    expect(find.textContaining('Protect image'), findsOneWidget);
   });
 }
