@@ -233,18 +233,50 @@ class _MethodPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return SegmentedButton<RedactionMethod>(
       showSelectedIcon: false,
-      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      style: const ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        // The default segment padding assumes a short word beside an
+        // icon. Stacked, the word needs that width more than the padding
+        // does.
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 6),
+        ),
+      ),
       segments: [
         for (final method in RedactionMethod.values)
           ButtonSegment<RedactionMethod>(
             value: method,
-            icon: Icon(iconForMethod(method), size: 18),
             // Icon-only segments need an accessible name, or a screen
             // reader announces three anonymous buttons.
             tooltip: labelForMethod(method),
-            label: Text(labelForMethod(method)),
+            // Icon ABOVE the label, not beside it.
+            //
+            // Side by side, three segments each need an icon plus up to
+            // nine characters, and that does not fit inside a card on a
+            // narrow phone: a tester's screenshot showed "Pixelate" and
+            // "Blackout" each broken across two lines mid-word. Stacking
+            // gives the word the full width of its segment instead of
+            // what the icon left over.
+            label: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(iconForMethod(method), size: 18),
+                const SizedBox(height: 2),
+                Text(
+                  labelForMethod(method),
+                  maxLines: 1,
+                  // Ellipsis rather than wrap, so a very large system
+                  // font scale degrades to a shortened word instead of
+                  // going back to the two-line mess this replaced.
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall,
+                ),
+              ],
+            ),
           ),
       ],
       selected: {value},

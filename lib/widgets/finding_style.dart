@@ -20,6 +20,7 @@ IconData iconForFinding(FindingType type) => switch (type) {
   FindingType.url => Icons.link,
   FindingType.cardNumber => Icons.credit_card,
   FindingType.address => Icons.home_outlined,
+  FindingType.licensePlate => Icons.directions_car_outlined,
   FindingType.qrCode => Icons.qr_code_2,
   FindingType.manual => Icons.crop_square,
 };

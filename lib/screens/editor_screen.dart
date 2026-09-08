@@ -178,6 +178,14 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
+  void _toggleDraw() {
+    setState(() {
+      _drawMode = !_drawMode;
+      _dragStartInImage = null;
+      _draftRect = null;
+    });
+  }
+
   void _removeFinding(String id) {
     setState(() {
       _findings = [
@@ -234,17 +242,12 @@ class _EditorScreenState extends State<EditorScreen> {
       appBar: AppBar(
         title: const Text('Privacy check'),
         actions: [
-          IconButton(
-            tooltip: _drawMode ? 'Done drawing' : 'Draw a box to hide',
-            isSelected: _drawMode,
-            icon: const Icon(Icons.draw_outlined),
-            selectedIcon: const Icon(Icons.draw),
-            onPressed: () => setState(() {
-              _drawMode = !_drawMode;
-              _dragStartInImage = null;
-              _draftRect = null;
-            }),
-          ),
+          // The manual-redaction toggle used to live here, as an icon
+          // with only a tooltip to explain it. Most of the closed-test
+          // group never found it at all - an unlabelled glyph in the app
+          // bar reads as chrome, not as a tool. It is now a labelled
+          // button in the review panel, beside the action it supports.
+          //
           // A developer tool, not a feature. It answers "did OCR fail to
           // read this, or did the rules fail to classify it?" - two bugs
           // that look identical from the outside and need opposite fixes.
@@ -269,8 +272,20 @@ class _EditorScreenState extends State<EditorScreen> {
         children: [
           Expanded(
             flex: 3,
-            child: ColoredBox(
-              color: context.semantics.canvas,
+            child: AnimatedContainer(
+              duration: AppMotion.fast,
+              // Draw mode changes what dragging on the photo does, so it
+              // has to be visible ON the photo. Panning suddenly drawing
+              // a box is alarming if nothing said the mode had changed.
+              decoration: BoxDecoration(
+                color: context.semantics.canvas,
+                border: Border.all(
+                  color: _drawMode
+                      ? Theme.of(context).colorScheme.secondary
+                      : Colors.transparent,
+                  width: 2,
+                ),
+              ),
               child: InteractiveViewer(
                 // Panning and drawing are the same gesture. While the
                 // draw tool is on, the viewer has to keep its hands off
@@ -379,6 +394,7 @@ class _EditorScreenState extends State<EditorScreen> {
               cardKeys: _cardKeys,
               highlightedId: _highlightedId,
               drawMode: _drawMode,
+              onToggleDraw: _toggleDraw,
               onDeleteFinding: _removeFinding,
               hiddenCount: _hiddenCount,
               protecting: _protecting,
@@ -402,6 +418,7 @@ class _ReviewPanel extends StatelessWidget {
     required this.cardKeys,
     required this.highlightedId,
     required this.drawMode,
+    required this.onToggleDraw,
     required this.onDeleteFinding,
     required this.hiddenCount,
     required this.protecting,
@@ -417,6 +434,7 @@ class _ReviewPanel extends StatelessWidget {
   final Map<String, GlobalKey> cardKeys;
   final String? highlightedId;
   final bool drawMode;
+  final VoidCallback onToggleDraw;
   final ValueChanged<String> onDeleteFinding;
   final int hiddenCount;
   final bool protecting;
@@ -445,57 +463,58 @@ class _ReviewPanel extends StatelessWidget {
             AppSpacing.md,
             AppSpacing.sm,
           ),
-          child: findings.isEmpty
-              ? const _NothingFound()
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (findings.isNotEmpty)
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            // "Potential" is deliberate (outline section
-                            // 18). The scan assists; it does not certify.
-                            '${findings.length} potential '
-                            '${findings.length == 1 ? "risk" : "risks"}',
-                            style: theme.textTheme.titleMedium,
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              onSetAll(hiddenCount != findings.length),
-                          child: Text(
-                            hiddenCount == findings.length
-                                ? 'Keep all'
-                                : 'Hide all',
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      drawMode
-                          ? 'Drag on the photo to cover anything the scan '
-                                'missed.'
-                          : 'Tap the photo to find an item in this list.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: drawMode
-                            ? scheme.secondary
-                            : scheme.onSurfaceVariant,
+                    Expanded(
+                      child: Text(
+                        // "Potential" is deliberate (outline section
+                        // 18). The scan assists; it does not certify.
+                        '${findings.length} potential '
+                        '${findings.length == 1 ? "risk" : "risks"}',
+                        style: theme.textTheme.titleMedium,
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Expanded(
-                      // SingleChildScrollView + Column, not ListView.
-                      //
-                      // Scrollable.ensureVisible needs the target card's
-                      // GlobalKey to have a context, which means the card
-                      // must actually be built. ListView is lazy - even
-                      // ListView(children: [...]) only creates elements
-                      // for the visible range - so tapping face 8 of 20
-                      // found no context and silently did not scroll.
-                      // This builds every card. Findings number in the
-                      // tens, so that is cheap.
-                      child: SingleChildScrollView(
+                    TextButton(
+                      onPressed: () => onSetAll(hiddenCount != findings.length),
+                      child: Text(
+                        hiddenCount == findings.length
+                            ? 'Keep all'
+                            : 'Hide all',
+                      ),
+                    ),
+                  ],
+                ),
+              if (findings.isNotEmpty || drawMode)
+                Text(
+                  drawMode
+                      ? 'Drag on the photo to cover anything the scan '
+                            'missed.'
+                      : 'Tap the photo to find an item in this list.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: drawMode
+                        ? scheme.secondary
+                        : scheme.onSurfaceVariant,
+                  ),
+                ),
+              const SizedBox(height: AppSpacing.sm),
+              Expanded(
+                child: findings.isEmpty
+                    ? const _NothingFound()
+                    // SingleChildScrollView + Column, not ListView.
+                    //
+                    // Scrollable.ensureVisible needs the target card's
+                    // GlobalKey to have a context, which means the card
+                    // must actually be built. ListView is lazy - even
+                    // ListView(children: [...]) only creates elements
+                    // for the visible range - so tapping face 8 of 20
+                    // found no context and silently did not scroll.
+                    // This builds every card. Findings number in the
+                    // tens, so that is cheap.
+                    : SingleChildScrollView(
                         padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -535,29 +554,77 @@ class _ReviewPanel extends StatelessWidget {
                           ],
                         ),
                       ),
-                    ),
-                    FilledButton.icon(
-                      // Disabled with nothing selected: a button that
-                      // produces an identical copy is not an action.
-                      onPressed: hiddenCount == 0 || protecting
-                          ? null
-                          : onProtect,
-                      icon: protecting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.auto_fix_high),
-                      label: Text(switch ((protecting, hiddenCount)) {
-                        (true, _) => 'Protecting...',
-                        (false, 0) => 'Nothing selected to hide',
-                        (false, final count) => 'Protect image ($count)',
-                      }),
-                    ),
-                  ],
-                ),
+              ),
+              // The manual tool, as a labelled button rather than
+              // an app bar glyph. It sits directly above Protect
+              // because that is where the eye already is once the
+              // list has been read, and because "the scan missed
+              // something" is realised at exactly that moment.
+              _DrawToggle(active: drawMode, onPressed: onToggleDraw),
+              const SizedBox(height: AppSpacing.sm),
+              FilledButton.icon(
+                // Disabled with nothing selected: a button that
+                // produces an identical copy is not an action.
+                onPressed: hiddenCount == 0 || protecting ? null : onProtect,
+                icon: protecting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.auto_fix_high),
+                label: Text(switch ((protecting, hiddenCount)) {
+                  (true, _) => 'Protecting...',
+                  (false, 0) => 'Nothing selected to hide',
+                  (false, final count) => 'Protect image ($count)',
+                }),
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// The manual-redaction toggle (outline section 21).
+///
+/// Outlined when off, filled when on. Two states that are obviously
+/// different matter more here than in most toggles: while it is on, a
+/// drag on the photo draws a box instead of panning, and a user who
+/// cannot tell which mode they are in will read that as the app
+/// misbehaving.
+class _DrawToggle extends StatelessWidget {
+  const _DrawToggle({required this.active, required this.onPressed});
+
+  final bool active;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(
+          active ? scheme.secondaryContainer : Colors.transparent,
+        ),
+        foregroundColor: WidgetStatePropertyAll(
+          active ? scheme.onSecondaryContainer : scheme.onSurface,
+        ),
+        side: WidgetStatePropertyAll(
+          BorderSide(
+            color: active ? scheme.secondary : scheme.outlineVariant,
+            width: active ? 2 : 1,
+          ),
+        ),
+      ),
+      icon: Icon(active ? Icons.check : Icons.draw_outlined, size: 20),
+      label: Text(
+        active ? 'Done drawing' : 'Hide something myself',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -585,8 +652,8 @@ class _NothingFound extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Text(
-              'Automatic checks are not perfect. Review the image yourself '
-              'before sharing it.',
+              'Automatic checks are not perfect. Review the image yourself, '
+              'and use the button below to hide anything the scan missed.',
               textAlign: TextAlign.center,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,

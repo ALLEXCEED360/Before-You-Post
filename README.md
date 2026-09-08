@@ -37,7 +37,7 @@ The README says what actually works today rather than what is planned.
 |---|---|
 | Pick a photo from the gallery or camera | ✅ Working |
 | Face detection | ✅ Working |
-| OCR + rule-based detection of phone numbers, emails, URLs, card numbers, addresses | ✅ Working |
+| OCR + rule-based detection of phone numbers, emails, URLs, card numbers, addresses, number plates | ✅ Working |
 | QR and barcode detection, with decoded payload shown | ✅ Working |
 | Review each finding and choose hide / keep | ✅ Working |
 | Choose blur / pixelate / blackout per finding | ✅ Working |
@@ -95,6 +95,10 @@ Two design decisions carry most of the weight:
 The Luhn checksum is what makes card detection usable at all. Without it, "any 13–19 digit run" flags order numbers, timestamps and tracking IDs constantly. Every real card number satisfies Luhn and a random digit run passes only about one time in ten.
 
 Detector ordering is load-bearing: a 16-digit card number **also** satisfies the phone-number pattern, so cards are tested first. There is a test pinning that behaviour so a future reorder fails loudly.
+
+Number plates use the same idea as Luhn — a cheap structural check that turns an unusable pattern into a usable one. Plate formats are shapes that ordinary text hits constantly: `ABC 1234` is also an order reference, a seat row and half the part numbers ever printed. What separates them is context, not shape. A plate is photographed as its own object, so OCR returns it as a short standalone line, and a match is only accepted when it accounts for **at least 60% of its line**. The same string inside a sentence is ignored. Requiring capitals costs nothing and removes a lot more.
+
+Addresses run three patterns rather than one: number-then-street (`1600 Pennsylvania Ave`), keyword-then-number (`House 12`, `Flat 3B`), and postcodes in the two forms distinctive enough to be worth matching. They overlap deliberately — `House 12, Road 5` matches two of them — so a match another longer match already covers is dropped, or the user gets two boxes over nearly the same words.
 
 ---
 
@@ -238,7 +242,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-30 tests, all running **in memory with no emulator**, in about a second.
+41 tests, all running **in memory with no emulator**, in about two seconds.
 
 **Unit tests (`test/sensitive_text_test.dart`)** cover the part most likely to be wrong and cheapest to check — the rules. Positive cases for every pattern, plus the negatives that matter:
 
@@ -251,6 +255,9 @@ flutter test
 
 - dark mode renders without throwing
 - the layout survives **2.0× system text scale**, roughly Android's maximum accessibility font size
+- the three redaction-method labels stay on one line in a narrow card at 1.3× text scale
+
+The method-label test exists because that one shipped: on a narrower phone than the one this was developed on, "Pixelate" and "Blackout" each broke across two lines mid-word. Nothing threw — text wrapping is legal layout — so the test measures the rendered height instead of watching for an exception.
 
 That text-scale test has already caught two real bugs — a `Spacer` overflowing inside a scroll view, and a later fix where the tagline silently grew until it overlapped the tap prompt. Both were invisible at default text size.
 
@@ -271,13 +278,14 @@ Detector robustness has not been measured systematically yet. Flat, well-lit QR 
 These are measured, not hypothetical.
 
 - **Blur and pixelation are weaker than blackout.** Both are lossy but not destructive, and against a short, guessable value such as a phone number they are a softer guarantee than a solid block. That is why text defaults to blackout and only faces default to blur. An early blur radius left phone numbers readable in testing; it is now far more aggressive, and a test pins that strength.
-- **The release APK is about 117 MB.** It is a universal build carrying every ABI plus ML Kit's bundled models. `flutter build appbundle`, or `--split-per-abi`, would cut that substantially; neither is set up yet.
+- **The universal APK is about 117 MB**, carrying every ABI plus ML Kit's bundled models. The app bundle shipped to Play is 80.9 MB and installs at **24 MB** on a given device, because Play delivers only the matching ABI and density. Sideloading the universal APK is the expensive path, not the normal one.
 - **The protected copy is always re-encoded from raw pixels**, so a palette PNG comes back as a full-colour PNG and is larger than the original, and an AVIF or HEIC input comes back as JPEG. Correctness and format support over file size.
-- **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Manual redaction (planned) is the escape hatch.
-- **Address detection is shallow.** A regex for "number + street name + suffix" catches common US-style addresses and will miss most international formats.
+- **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Drawing a box by hand is the escape hatch.
+- **Address detection is still rules, not understanding.** It covers number-then-street, keyword-then-number and two postcode forms, which between them reach well beyond the original US-only rule — but it recognises shapes, not places, and an address written in a shape none of the three anticipate is invisible to it.
 - **Phone-number detection is US-centric** and will flag some non-phone digit sequences of the right shape. This is why every finding is labelled *potential* and is reviewable.
 - **English/Latin script only.** The OCR model loaded is the Latin recogniser.
-- **No licence-plate detection.** Deliberately deferred; it needs a separate object-detection model.
+- **Number plates are read, not seen.** They are found by OCR plus a pattern, not by locating a plate in the image, so a plate has to be legible as text to be found at all — and a format none of the four patterns covers is missed. Non-Latin plates cannot be read at all, which rules out the Bengali and Devanagari plates common in the markets this was tested in.
+- **Objects cannot be detected, only faces, text and codes.** House keys are the case testers asked for: photographing a key can be enough to have one cut. Recognising one needs an object-detection model, and ML Kit's classifies into five coarse categories that do not include keys. Nothing here can find them, so the manual tool is the honest answer.
 - **Android only.** iOS builds require macOS and the project has no `ios/` target configured.
 
 ---

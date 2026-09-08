@@ -15,6 +15,7 @@ enum FindingType {
   url('Link', RedactionMethod.blackout),
   cardNumber('Card number', RedactionMethod.blackout),
   address('Address', RedactionMethod.blackout),
+  licensePlate('Number plate', RedactionMethod.blackout),
   qrCode('QR code', RedactionMethod.pixelate),
   manual('Manual selection', RedactionMethod.blackout);
 

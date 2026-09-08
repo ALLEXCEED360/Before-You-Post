@@ -2,11 +2,18 @@
 // They run in about a second, which makes them the cheapest safety net
 // against accidentally breaking a screen.
 
+import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:before_you_post/main.dart';
+import 'package:before_you_post/models/privacy_finding.dart';
+import 'package:before_you_post/theme/app_theme.dart';
+import 'package:before_you_post/widgets/finding_card.dart';
 import 'package:before_you_post/screens/intro_screen.dart';
 import 'package:before_you_post/theme/theme_controller.dart';
 
@@ -37,6 +44,21 @@ Future<ThemeController> pumpApp(WidgetTester tester) async {
 Future<void> enterApp(WidgetTester tester) async {
   await tester.tapAt(tester.getCenter(find.byType(IntroScreen)));
   await settle(tester);
+}
+
+/// A solid white image, so a card has something to draw a thumbnail from.
+Future<ui.Image> solidImage(int width, int height) {
+  final completer = Completer<ui.Image>();
+  final pixels = Uint8List(width * height * 4)
+    ..fillRange(0, width * height * 4, 255);
+  ui.decodeImageFromPixels(
+    pixels,
+    width,
+    height,
+    ui.PixelFormat.rgba8888,
+    completer.complete,
+  );
+  return completer.future;
 }
 
 void main() {
@@ -123,5 +145,64 @@ void main() {
 
     expect(find.text('Choose photo'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('redaction methods stay on one line on a narrow screen', (
+    WidgetTester tester,
+  ) async {
+    // A tester's screenshot showed "Pixelate" and "Blackout" each broken
+    // across two lines mid-word, on a phone narrower than the one this
+    // was built on. Nothing threw - Text wrapping is legal layout - so
+    // no existing test caught it, and it shipped.
+    //
+    // Hence measuring the rendered height rather than looking for an
+    // exception. A second line roughly doubles it.
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+
+    // runAsync, not a bare await. testWidgets runs its body inside a
+    // fake-async zone, and decodeImageFromPixels completes on the real
+    // event loop - which that zone never advances, so awaiting it
+    // directly hangs the whole suite forever rather than failing.
+    late final ui.Image image;
+    await tester.runAsync(() async => image = await solidImage(40, 40));
+    addTearDown(image.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(
+          // Roughly the width a card gets inside the review panel on a
+          // small phone, once both sets of padding are taken out.
+          body: Center(
+            child: SizedBox(
+              width: 280,
+              child: FindingCard(
+                finding: PrivacyFinding(
+                  id: 'test',
+                  type: FindingType.face,
+                  bounds: const Rect.fromLTWH(0, 0, 40, 40),
+                ),
+                image: image,
+                number: 1,
+                highlighted: false,
+                onSelectedChanged: (_) {},
+                onMethodChanged: (_) {},
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await settle(tester);
+
+    for (final label in ['Blur', 'Pixelate', 'Blackout']) {
+      expect(
+        tester.getSize(find.text(label)).height,
+        lessThan(26),
+        reason: '"$label" wrapped onto a second line',
+      );
+    }
   });
 }

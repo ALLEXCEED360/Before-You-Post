@@ -1,6 +1,6 @@
 # Privacy Policy — Before You Post
 
-**Last updated: 5 September 2026**
+**Last updated: 7 September 2026**
 
 Before You Post is an Android app that helps you find and hide sensitive
 details in a photo before you share it.
@@ -35,7 +35,7 @@ When you choose a photo or take one:
 2. The image is analysed **on your device** by Google ML Kit to find faces,
    text and QR/barcodes. Text that is found is checked against rules
    written into the app (patterns for phone numbers, email addresses, web
-   links, card numbers and street addresses).
+   links, card numbers, addresses and vehicle number plates).
 3. You review what was found and choose what to hide.
 4. If you tap **Protect image**, a new copy is created in the device's
    memory with the areas you selected obscured. **Your original photo is

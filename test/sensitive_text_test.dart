@@ -89,4 +89,85 @@ void main() {
       expect(findSensitive('The quick brown fox'), isEmpty);
     });
   });
+
+  group('addresses beyond the American form', () {
+    // Testers outside the US reported addresses going undetected. The
+    // original rule only understood "123 Main Street": number first,
+    // spaces between the words, and a thoroughfare word from a short
+    // Anglo-American list.
+    test('reads through a comma', () {
+      // "House 12, Road 5" broke at the comma, because the separator was
+      // \s+ and a comma is not whitespace.
+      final matches = findSensitive('House 12, Road 5');
+      expect(matches.map((m) => m.type), everyElement(FindingType.address));
+      expect(matches, isNotEmpty);
+    });
+
+    test('overlapping address rules produce one finding, not two', () {
+      // Both the premise rule ("House 12") and the street rule ("12,
+      // Road") match this line. Reporting both would draw two boxes over
+      // nearly the same words, which reads as a bug.
+      expect(findSensitive('House 12, Road 5').length, 1);
+    });
+
+    test('detects a keyword-first premise', () {
+      expect(findSensitive('Flat 3B').single.type, FindingType.address);
+      expect(findSensitive('Plot 45').single.type, FindingType.address);
+    });
+
+    test('detects postcodes in their distinctive forms', () {
+      expect(
+        findSensitive('Houston TX 77002').single.type,
+        FindingType.address,
+      );
+      expect(findSensitive('London SW1A 1AA').single.type, FindingType.address);
+    });
+
+    test('a bare five-digit number is not a postcode', () {
+      // Without a state code in front of it, this shape is just "a
+      // number" - order totals, item counts and years all match it.
+      expect(findSensitive('Total 77002 units'), isEmpty);
+    });
+
+    test('detects a South Asian street form', () {
+      expect(
+        findSensitive('45/A Green Road, Dhaka').single.type,
+        FindingType.address,
+      );
+    });
+  });
+
+  group('number plates', () {
+    test('detects the common national formats', () {
+      for (final sample in ['MH 12 AB 1234', 'AB12 CDE', 'ABC 1234']) {
+        expect(
+          findSensitive(sample).map((m) => m.type),
+          contains(FindingType.licensePlate),
+          reason: 'failed on: $sample',
+        );
+      }
+    });
+
+    test('ignores a plate-shaped code buried in a sentence', () {
+      // This is the whole reason plates are usable as a rule. A plate is
+      // photographed as its own object, so OCR returns it as a short
+      // standalone line. The same shape inside a paragraph is far more
+      // likely to be a reference number, and flagging every one of those
+      // would bury the real findings.
+      expect(
+        findSensitive('Your order ABC 1234 has shipped and will arrive soon')
+            .map((m) => m.type),
+        isNot(contains(FindingType.licensePlate)),
+      );
+    });
+
+    test('lower case is not a plate', () {
+      // Plates are stamped in capitals. Requiring that costs nothing and
+      // discards a large amount of ordinary prose.
+      expect(
+        findSensitive('abc 1234').map((m) => m.type),
+        isNot(contains(FindingType.licensePlate)),
+      );
+    });
+  });
 }
