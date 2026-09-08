@@ -31,7 +31,7 @@ class SensitiveTextDetector {
     }
 
     findings.addAll(_joinSplitCardNumbers(lines, findings.length));
-    findings.addAll(_labelledSecurityCodes(lines, findings.length));
+    findings.addAll(_labelledSecurityCodes(lines, findings.length, findings));
 
     return findings;
   }
@@ -78,6 +78,31 @@ class SensitiveTextDetector {
     return labels;
   }
 
+  /// Whether a number is positioned as though the label belongs to it.
+  ///
+  /// Raw distance between centres was not enough. It has no sense of
+  /// direction, so it happily paired a label with whatever digits
+  /// happened to sit nearest - including part of the card number
+  /// diagonally above. A label refers to what is beside it on the same
+  /// line, or to what sits directly beneath it; those are the two ways a
+  /// card sets this out, and nothing else counts.
+  bool _readsAsLabelled(Rect label, Rect value) {
+    final height = math.max(label.height, value.height);
+
+    final onSameRow = (label.center.dy - value.center.dy).abs() <= height * 1.2;
+    if (onSameRow) {
+      final gap = value.left >= label.right
+          ? value.left - label.right
+          : label.left - value.right;
+      return gap <= height * 8;
+    }
+
+    final overlapsHorizontally =
+        value.left < label.right && label.left < value.right;
+    final below = value.top - label.bottom;
+    return overlapsHorizontally && below >= 0 && below <= height * 3;
+  }
+
   /// A security code whose label OCR put on a different line.
   ///
   /// On a card the label and the digits are set apart, so ML Kit
@@ -93,13 +118,27 @@ class SensitiveTextDetector {
   List<PrivacyFinding> _labelledSecurityCodes(
     List<OcrLine> lines,
     int startIndex,
+    List<PrivacyFinding> alreadyFound,
   ) {
     final labels = _securityCodeLabels(lines);
     if (labels.isEmpty) return const [];
 
+    // Digits already accounted for by a card number are not candidates.
+    //
+    // Without this the label pairs with a group of the card number
+    // itself, which sits closer to it than the real code does on most
+    // card layouts - so the app reported the third group of the number
+    // as the security code and left the actual code alone.
+    final cardRegions = [
+      for (final finding in alreadyFound)
+        if (finding.type == FindingType.cardNumber) finding.bounds,
+    ];
+
     final values = [
       for (final line in lines)
-        if (securityCodeValuePattern.hasMatch(line.text.trim())) line,
+        if (securityCodeValuePattern.hasMatch(line.text.trim()) &&
+            !cardRegions.any((card) => card.overlaps(line.bounds)))
+          line,
     ];
     if (values.isEmpty) return const [];
 
@@ -112,13 +151,9 @@ class SensitiveTextDetector {
 
       for (final value in values) {
         if (claimed.contains(value)) continue;
+        if (!_readsAsLabelled(label, value.bounds)) continue;
 
         final distance = (value.bounds.center - label.center).distance;
-        // Within a few line-heights. A label and its code are printed
-        // together; anything further away is a different number that
-        // happens to be three digits long.
-        if (distance > label.height * 6) continue;
-
         if (distance < nearestDistance) {
           nearest = value;
           nearestDistance = distance;

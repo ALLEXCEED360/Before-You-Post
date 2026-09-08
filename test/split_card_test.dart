@@ -256,4 +256,48 @@ void main() {
       hasLength(1),
     );
   });
+
+  test('a whole card front: number and code, each in the right place', () {
+    // The passes are independent, so each one can look right on its own
+    // and still fight the other on a real card. This is the layout they
+    // actually meet: the number in four groups across one row, the small
+    // print beneath it.
+    //
+    // It caught a genuine bug. Pairing by centre distance alone has no
+    // sense of direction, so the SECURITY CODE label claimed the third
+    // group of the card number - which sits closer to it than the real
+    // code does - and reported that as the security code.
+    final findings = const SensitiveTextDetector().detect([
+      row('4111', 60, 300, 150, 50),
+      row('1111', 240, 300, 150, 50),
+      row('1111', 420, 300, 150, 50),
+      row('1111', 600, 300, 150, 50),
+      row('VALID THRU', 60, 400, 200, 25),
+      row('12/28', 280, 400, 100, 25),
+      row('SECURITY CODE', 450, 400, 220, 25),
+      row('123', 690, 400, 70, 25),
+      row('A CARDHOLDER', 60, 460, 300, 30),
+    ]);
+
+    final card = findings.singleWhere((f) => f.type == FindingType.cardNumber);
+    final code = findings.singleWhere(
+      (f) => f.type == FindingType.securityCode,
+    );
+
+    // The number's box spans all four groups.
+    expect(card.bounds, const Rect.fromLTRB(60, 300, 750, 350));
+    // And the code's box is on the code, not on part of the number.
+    expect(code.bounds, const Rect.fromLTRB(690, 400, 760, 425));
+    expect(card.bounds.overlaps(code.bounds), isFalse);
+  });
+}
+
+/// A line of arbitrary size, for layouts where the geometry is the point.
+OcrLine row(String text, double l, double t, double w, double h) {
+  final bounds = Rect.fromLTWH(l, t, w, h);
+  return OcrLine(
+    text: text,
+    bounds: bounds,
+    tokens: [OcrToken(text: text, bounds: bounds)],
+  );
 }
