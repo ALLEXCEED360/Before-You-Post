@@ -47,6 +47,38 @@ void main() {
     test('does not flag a date', () {
       expect(findSensitive('Invoice dated 2024-01-15'), isEmpty);
     });
+
+    test('requires a phone-shaped grouping, not just ten digits', () {
+      // From a tester's photo of a bank card. "649160 1221" is a
+      // reference code grouped six and four, and the old rule read any
+      // ten digits as 3-3-4 wherever the gaps actually fell. Codes of
+      // this shape are all over printed material.
+      expect(findSensitive('649160 1221'), isEmpty);
+      expect(findSensitive('65946C002 20650 1221'), isEmpty);
+    });
+
+    test('requires the separator to be consistent', () {
+      // One separator, used in both positions. Mixing them is a
+      // coincidence rather than a number.
+      expect(
+        findSensitive('713-555 1234').map((m) => m.type),
+        isNot(contains(FindingType.phoneNumber)),
+      );
+    });
+
+    test('does not start or end inside a longer code', () {
+      expect(
+        findSensitive('REF7135551234X').map((m) => m.type),
+        isNot(contains(FindingType.phoneNumber)),
+      );
+    });
+
+    test('still detects a number written without separators', () {
+      expect(
+        findSensitive('Call 7135551234 today').single.type,
+        FindingType.phoneNumber,
+      );
+    });
   });
 
   group('other rules', () {

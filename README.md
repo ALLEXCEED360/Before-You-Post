@@ -92,6 +92,8 @@ Two design decisions carry most of the weight:
 
 **The rules are deliberately deterministic.** Regex plus validation, not a model. Rules are readable, unit-testable without a device, and explainable when they get something wrong. NLP is a later version, not a starting point.
 
+Phone numbers are the cautionary tale for how loose a rule can quietly be. The original pattern made every separator optional, so `649160 1221` — a reference code on a bank card, grouped six and four — matched as `649-160-1221`. Each branch now demands a grouping people actually write numbers in, and a backreference keeps the separator consistent, so `415-555-1234` counts and `415-555 1234` does not.
+
 The Luhn checksum is what makes card detection usable at all. Without it, "any 13–19 digit run" flags order numbers, timestamps and tracking IDs constantly. Every real card number satisfies Luhn and a random digit run passes only about one time in ten.
 
 It also does a second job. ML Kit groups text into lines by proximity, and a card number is the one thing routinely printed with gaps wide enough that the four groups come back as **four separate lines** — at which point every per-line rule sees `1111`, which is not a card number by any measure and not a phone number either. `SensitiveTextDetector` therefore rejoins digit groups that share a row and sit close together, concatenates them left to right, and tests the result with Luhn. It accepts any run of digits rather than groups of exactly four, because the line grouping is inconsistent about where it breaks — the same card comes back as four groups on one photo and two halves of eight on another. Requiring the checksum is what stops that from inventing card numbers out of price columns and spreadsheets: a false join has to pass a one-in-ten filter rather than always succeeding. The union of the group boxes becomes the redaction bounds, because blacking out one quarter of a card number leaves the rest legible.
@@ -250,7 +252,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-67 tests, all running **in memory with no emulator**, in about two seconds.
+71 tests, all running **in memory with no emulator**, in about two seconds.
 
 **Detector tests (`test/split_card_test.dart`)** describe ML Kit results by hand. `OcrLine` is plain data, so a result the app cannot easily produce on demand — a card number the recogniser has broken into four lines — can simply be written down, along with the geometry that makes rejoining it correct or wrong.
 
@@ -295,7 +297,7 @@ These are measured, not hypothetical.
 - **The protected copy is always re-encoded from raw pixels**, so a palette PNG comes back as a full-colour PNG and is larger than the original, and an AVIF or HEIC input comes back as JPEG. Correctness and format support over file size.
 - **One finding type per line of text.** A line containing both an email and a phone number reports only the email. Drawing a box by hand is the escape hatch.
 - **Address detection is still rules, not understanding.** It covers number-then-street, keyword-then-number and two postcode forms, which between them reach well beyond the original US-only rule — but it recognises shapes, not places, and an address written in a shape none of the three anticipate is invisible to it.
-- **Phone-number detection is US-centric** and will flag some non-phone digit sequences of the right shape. This is why every finding is labelled *potential* and is reviewable.
+- **Phone-number detection is US-centric.** It matches NANP groupings and an international `+` form, and will miss layouts that use neither. It is stricter than it was: the separators are no longer optional at every position, because that let any ten digits read as 3-3-4 wherever the gaps really fell, and a reference code printed on a bank card was reported as a phone number on a tester's photo. Every finding is still labelled *potential* and is reviewable.
 - **English/Latin script only.** The OCR model loaded is the Latin recogniser.
 - **Number plates are read, not seen.** They are found by OCR plus rules, not by locating a plate in the image, so a plate has to be legible as text to be found at all. A plate too small, too angled or too stylised for the recogniser is invisible to this, and no rule can help. Non-Latin plates cannot be read at all, which rules out Bengali and Devanagari ones.
 - **Secret detection is prefix-based, so a bespoke credential format is missed** unless it is labelled. An internal token that is neither recognisably issued nor written as `SOMETHING_KEY=` will not be found.

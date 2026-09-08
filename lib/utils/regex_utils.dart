@@ -26,8 +26,35 @@ final RegExp urlPattern = RegExp(
 /// until it passes Luhn - that check is what keeps false positives down.
 final RegExp cardCandidatePattern = RegExp(r"\b(?:\d[ -]?){13,19}\b");
 
+/// Phone numbers, in the groupings people actually write them in.
+///
+/// The separators used to be optional at every position, which let the
+/// rule read any ten digits as 3-3-4 regardless of where the gaps
+/// really fell. A reference code printed on a bank card - "649160 1221",
+/// grouped six and four - was reported as a phone number on a tester's
+/// photo, and codes of that shape are everywhere on printed material.
+///
+/// So each branch below now demands a grouping that a phone number is
+/// actually written in, and the backreference makes the separator
+/// consistent: "415-555-1234" and "415 555 1234" are numbers,
+/// "415-555 1234" is a coincidence. Ten unbroken digits still count,
+/// since that is a normal way to type one.
+///
+/// The boundary guards stop a match starting or ending inside a longer
+/// code, which is the other half of the same problem.
 final RegExp phonePattern = RegExp(
-  r"(?:\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}",
+  r"(?<![0-9A-Za-z])"
+  r"(?:"
+  // +1 713 555 1234, +44 20 7946 0958
+  r"\+\d{1,3}[\s.\-]\d{1,4}(?:[\s.\-]\d{2,4}){1,3}"
+  // (713) 555-1234
+  r"|\(\d{3}\)\s?\d{3}[\s.\-]?\d{4}"
+  // 713-555-1234, 713 555 1234, 713.555.1234 - one separator, used twice
+  r"|\d{3}([\s.\-])\d{3}\1\d{4}"
+  // 7135551234
+  r"|\d{10}"
+  r")"
+  r"(?![0-9A-Za-z])",
 );
 
 /// Street-style addresses: a number, then up to four words, then a
