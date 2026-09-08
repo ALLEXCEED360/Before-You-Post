@@ -94,6 +94,8 @@ Two design decisions carry most of the weight:
 
 The Luhn checksum is what makes card detection usable at all. Without it, "any 13–19 digit run" flags order numbers, timestamps and tracking IDs constantly. Every real card number satisfies Luhn and a random digit run passes only about one time in ten.
 
+It also does a second job. ML Kit groups text into lines by proximity, and a card number is the one thing routinely printed with gaps wide enough that the four groups come back as **four separate lines** — at which point every per-line rule sees `1111`, which is not a card number by any measure and not a phone number either. `SensitiveTextDetector` therefore rejoins digit groups that share a row and sit close together, concatenates them left to right, and tests the result with Luhn. Requiring the checksum is what stops that from inventing card numbers out of price columns and spreadsheets: a false join has to pass a one-in-ten filter rather than always succeeding. The union of the group boxes becomes the redaction bounds, because blacking out one quarter of a card number leaves the rest legible.
+
 Detector ordering is load-bearing: a 16-digit card number **also** satisfies the phone-number pattern, so cards are tested first. There is a test pinning that behaviour so a future reorder fails loudly.
 
 Credentials are the highest-value thing in this list and the easiest to match, because the formats are issued rather than written: nothing in ordinary prose begins `AKIA` and continues for exactly sixteen more capitals. Provider prefixes cover AWS, Google, GitHub, Slack, Stripe, OpenAI and Anthropic keys, plus JWTs and PEM private-key headers. A second rule catches the formatless case — `API_KEY=...` in a screenshot of an `.env` file or a terminal — where the value is indistinguishable from noise and only the label says it matters. That rule uses a **lookbehind rather than ``**, because an underscore is a word character and `` never fires between `DB_` and `PASSWORD`, which silently missed every environment variable. A secret is also the one finding whose matched text is **not** shown in the review list; printing the key on screen would defeat the point of finding it.
@@ -246,7 +248,9 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-51 tests, all running **in memory with no emulator**, in about two seconds.
+56 tests, all running **in memory with no emulator**, in about two seconds.
+
+**Detector tests (`test/split_card_test.dart`)** describe ML Kit results by hand. `OcrLine` is plain data, so a result the app cannot easily produce on demand — a card number the recogniser has broken into four lines — can simply be written down, along with the geometry that makes rejoining it correct or wrong.
 
 **Unit tests (`test/sensitive_text_test.dart`)** cover the part most likely to be wrong and cheapest to check — the rules. Positive cases for every pattern, plus the negatives that matter:
 

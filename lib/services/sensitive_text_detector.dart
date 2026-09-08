@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../models/privacy_finding.dart';
@@ -29,7 +30,118 @@ class SensitiveTextDetector {
       }
     }
 
+    findings.addAll(_joinSplitCardNumbers(lines, findings.length));
+
     return findings;
+  }
+
+  /// Card numbers printed across several OCR lines.
+  ///
+  /// A card is the one thing routinely printed with gaps wide enough
+  /// that ML Kit stops calling it one line. The four groups of an
+  /// embossed number are far enough apart to come back as four separate
+  /// lines of four digits each, and every per-line rule then sees
+  /// "1111" - not a card number by any measure, and not a phone number
+  /// either. The card silently goes unflagged.
+  ///
+  /// So the groups are rejoined here: digit runs sharing a row, close
+  /// enough together, concatenated left to right and tested with Luhn.
+  ///
+  /// Luhn is what makes this safe. Joining arbitrary numbers that happen
+  /// to share a row would otherwise invent card numbers out of prices,
+  /// dates and table columns; requiring the checksum means a false join
+  /// passes about one time in ten rather than always.
+  List<PrivacyFinding> _joinSplitCardNumbers(
+    List<OcrLine> lines,
+    int startIndex,
+  ) {
+    final groupPattern = RegExp(r"^\d{3,6}$");
+
+    final candidates = [
+      for (final line in lines)
+        if (groupPattern.hasMatch(line.text.trim())) line,
+    ];
+    // One group on its own can never reach thirteen digits.
+    if (candidates.length < 2) return const [];
+
+    candidates.sort((a, b) {
+      final byRow = a.bounds.center.dy.compareTo(b.bounds.center.dy);
+      return byRow != 0 ? byRow : a.bounds.left.compareTo(b.bounds.left);
+    });
+
+    // Gather into rows. Two groups are on the same row when their
+    // vertical centres are closer together than the text is tall.
+    final rows = <List<OcrLine>>[];
+    for (final line in candidates) {
+      final row = rows.isEmpty ? null : rows.last;
+      if (row != null) {
+        final previous = row.last;
+        final tolerance =
+            math.max(previous.bounds.height, line.bounds.height) * 0.6;
+        if ((line.bounds.center.dy - previous.bounds.center.dy).abs() <=
+            tolerance) {
+          row.add(line);
+          continue;
+        }
+      }
+      rows.add([line]);
+    }
+
+    final found = <PrivacyFinding>[];
+
+    for (final row in rows) {
+      row.sort((a, b) => a.bounds.left.compareTo(b.bounds.left));
+
+      var i = 0;
+      while (i < row.length) {
+        final digits = StringBuffer();
+        var bounds = row[i].bounds;
+        var matchedAt = -1;
+
+        for (var j = i; j < row.length; j++) {
+          if (j > i) {
+            final gap = row[j].bounds.left - row[j - 1].bounds.right;
+            final height = math.max(
+              row[j].bounds.height,
+              row[j - 1].bounds.height,
+            );
+            // The groups of one number sit close together. A gap several
+            // times the digit height means these are two different
+            // numbers that happen to share a line.
+            if (gap > height * 3) break;
+          }
+
+          digits.write(row[j].text.trim());
+          bounds = bounds.expandToInclude(row[j].bounds);
+
+          if (digits.length > 19) break;
+          if (digits.length >= 13 && passesLuhn(digits.toString())) {
+            matchedAt = j;
+            break;
+          }
+        }
+
+        if (matchedAt < 0) {
+          i++;
+          continue;
+        }
+
+        found.add(
+          PrivacyFinding(
+            id: 'card_join_${startIndex + found.length}',
+            type: FindingType.cardNumber,
+            bounds: bounds,
+            detail: [
+              for (final line in row.sublist(i, matchedAt + 1))
+                line.text.trim(),
+            ].join(' '),
+          ),
+        );
+        i = matchedAt + 1;
+      }
+    }
+
+    return found;
   }
 
   /// What the card shows beside the finding.
