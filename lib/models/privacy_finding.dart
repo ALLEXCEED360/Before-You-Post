@@ -16,6 +16,7 @@ enum FindingType {
   cardNumber('Card number', RedactionMethod.blackout),
   address('Address', RedactionMethod.blackout),
   licensePlate('Number plate', RedactionMethod.blackout),
+  secret('API key or secret', RedactionMethod.blackout),
   qrCode('QR code', RedactionMethod.pixelate),
   manual('Manual selection', RedactionMethod.blackout);
 

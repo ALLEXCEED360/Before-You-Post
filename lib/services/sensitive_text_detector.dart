@@ -23,13 +23,27 @@ class SensitiveTextDetector {
             id: 'text_${index++}',
             type: match.type,
             bounds: _boundsForMatch(line, match.text),
-            detail: match.text,
+            detail: _detailFor(match),
           ),
         );
       }
     }
 
     return findings;
+  }
+
+  /// What the card shows beside the finding.
+  ///
+  /// The matched text, except for a credential - printing an API key in
+  /// the review list would defeat the point of finding it. Enough of the
+  /// prefix survives to tell two secrets apart, which is all the user
+  /// needs in order to decide.
+  String _detailFor(SensitiveMatch match) {
+    if (match.type != FindingType.secret) return match.text;
+    final visible = match.text.length <= 8
+        ? match.text
+        : match.text.substring(0, 8);
+    return '$visible...';
   }
 
   /// Narrows a match down to the words it actually covers.

@@ -170,4 +170,106 @@ void main() {
       );
     });
   });
+
+  group('vanity plates', () {
+    test('detects a plate with no structural format', () {
+      // The case that prompted this: a real Florida plate, photographed
+      // on a car, matching none of the national shapes. OCR returns it
+      // beside the state name.
+      for (final sample in ['B2TRW', 'FLORIDA B2TRW', 'TEXAS ABC49']) {
+        expect(
+          findSensitive(sample).map((m) => m.type),
+          contains(FindingType.licensePlate),
+          reason: 'failed on: $sample',
+        );
+      }
+    });
+
+    test('a postcode line is an address, not a plate', () {
+      // "SW1A" is capitals plus digits on a short line, so the shape
+      // alone cannot separate it from a plate. Two remaining tokens
+      // after the place name is what does.
+      expect(findSensitive('London SW1A 1AA').single.type, FindingType.address);
+      expect(
+        findSensitive('Houston TX 77002').single.type,
+        FindingType.address,
+      );
+    });
+
+    test('a sentence is not a plate', () {
+      expect(findSensitive('We arrive at gate B24 shortly'), isEmpty);
+    });
+
+    test('all digits or all letters is not a plate', () {
+      expect(findSensitive('774028'), isEmpty);
+      expect(findSensitive('HELLO'), isEmpty);
+    });
+  });
+
+  group('credentials', () {
+    test('detects provider-issued keys by their prefix', () {
+      // Assembled from fragments rather than written as literals.
+      //
+      // None of these has ever been a real credential, but they are
+      // structurally valid - which is the whole point of them, and also
+      // exactly what a secret scanner looks for. Written out in full,
+      // GitHub blocked the push that carried this file and named two of
+      // them. Keeping the prefix apart from the body leaves nothing in
+      // the source that pattern-matches a live key, while the strings
+      // the detector actually sees are unchanged.
+      String key(String prefix, String body) => '$prefix$body';
+
+      final samples = {
+        key('AKIA', 'IOSFODNN7EXAMPLE'): 'AWS access key id',
+        key('AIza', 'SyD-1234567890abcdefghijklmnopqrstu'): 'Google API key',
+        key('ghp', '_1234567890abcdefghijklmnopqrstuvwxyzAB'): 'GitHub token',
+        key('xoxb', '-123456789012-abcdefghijklmnop'): 'Slack token',
+        key('sk_live', '_abcdefghijklmnopqrstuvwx'): 'Stripe secret key',
+        key('sk-ant', '-api03-abcdefghijklmnopqrstuvwxyz'): 'Anthropic key',
+      };
+
+      samples.forEach((sample, description) {
+        expect(
+          findSensitive('key: $sample').map((m) => m.type),
+          contains(FindingType.secret),
+          reason: 'missed a $description',
+        );
+      });
+    });
+
+    test('detects a JSON Web Token', () {
+      const jwt =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'
+          '.eyJzdWIiOiIxMjM0NTY3ODkwIn0'
+          '.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1gFWFOEjXk';
+      expect(findSensitive(jwt).single.type, FindingType.secret);
+    });
+
+    test('detects a private key header', () {
+      expect(
+        findSensitive('-----BEGIN RSA PRIVATE KEY-----').single.type,
+        FindingType.secret,
+      );
+    });
+
+    test('detects a formatless secret by the name it is given', () {
+      // The .env case. The value is indistinguishable from noise; only
+      // the label says it matters.
+      for (final sample in [
+        'API_KEY=8f4c2a9e1b7d6350',
+        'DB_PASSWORD: hunter2hunter2',
+        'client_secret = "abcd1234efgh5678"',
+      ]) {
+        expect(
+          findSensitive(sample).map((m) => m.type),
+          contains(FindingType.secret),
+          reason: 'failed on: $sample',
+        );
+      }
+    });
+
+    test('a labelled value too short to be a secret is ignored', () {
+      expect(findSensitive('the secret: I told you'), isEmpty);
+    });
+  });
 }

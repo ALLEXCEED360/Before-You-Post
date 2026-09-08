@@ -13,7 +13,7 @@ Scan a photo for faces, personal details and QR codes, then hide them.
 ```
 Before You Post checks a photo for things you might not want to share, and lets you hide them - all on your device.
 
-Screenshots and photos give away more than people notice. A conversation screenshot can contain a phone number, an email address and a home address. A holiday photo can contain a stranger's face. A picture of a parcel can contain a QR code that resolves to your details.
+Screenshots and photos give away more than people notice. A conversation screenshot can contain a phone number, an email address and a home address. A screenshot of a terminal can contain an API key. A holiday photo can contain a stranger's face. A picture of a parcel can contain a QR code that resolves to your details.
 
 Before You Post finds those things, shows you what it found, and lets you decide what to hide.
 
@@ -22,7 +22,7 @@ How it works
 
 1. Choose a photo, or take one.
 2. The app scans it for faces, text, and QR or barcodes.
-3. Text is checked against rules for phone numbers, email addresses, web links, card numbers, addresses and vehicle number plates.
+3. Text is checked against rules for phone numbers, email addresses, web links, card numbers, addresses, vehicle number plates and API keys.
 4. You review everything found, and choose what to hide and how.
 5. Tap Protect, and the app produces a new copy with those areas obscured.
 
@@ -38,6 +38,7 @@ What it finds
 • Card numbers, validated with a checksum to cut down on false alarms
 • Addresses, including house and flat numbers and postcodes
 • Vehicle number plates
+• API keys, access tokens and other credentials
 • QR codes and barcodes, with the decoded contents shown so you can judge them yourself
 
 

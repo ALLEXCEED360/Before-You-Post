@@ -37,7 +37,7 @@ The README says what actually works today rather than what is planned.
 |---|---|
 | Pick a photo from the gallery or camera | ✅ Working |
 | Face detection | ✅ Working |
-| OCR + rule-based detection of phone numbers, emails, URLs, card numbers, addresses, number plates | ✅ Working |
+| OCR + rule-based detection of phone numbers, emails, URLs, card numbers, addresses, number plates, API keys and secrets | ✅ Working |
 | QR and barcode detection, with decoded payload shown | ✅ Working |
 | Review each finding and choose hide / keep | ✅ Working |
 | Choose blur / pixelate / blackout per finding | ✅ Working |
@@ -96,7 +96,11 @@ The Luhn checksum is what makes card detection usable at all. Without it, "any 1
 
 Detector ordering is load-bearing: a 16-digit card number **also** satisfies the phone-number pattern, so cards are tested first. There is a test pinning that behaviour so a future reorder fails loudly.
 
+Credentials are the highest-value thing in this list and the easiest to match, because the formats are issued rather than written: nothing in ordinary prose begins `AKIA` and continues for exactly sixteen more capitals. Provider prefixes cover AWS, Google, GitHub, Slack, Stripe, OpenAI and Anthropic keys, plus JWTs and PEM private-key headers. A second rule catches the formatless case — `API_KEY=...` in a screenshot of an `.env` file or a terminal — where the value is indistinguishable from noise and only the label says it matters. That rule uses a **lookbehind rather than ``**, because an underscore is a word character and `` never fires between `DB_` and `PASSWORD`, which silently missed every environment variable. A secret is also the one finding whose matched text is **not** shown in the review list; printing the key on screen would defeat the point of finding it.
+
 Number plates use the same idea as Luhn — a cheap structural check that turns an unusable pattern into a usable one. Plate formats are shapes that ordinary text hits constantly: `ABC 1234` is also an order reference, a seat row and half the part numbers ever printed. What separates them is context, not shape. A plate is photographed as its own object, so OCR returns it as a short standalone line, and a match is only accepted when it accounts for **at least 60% of its line**. The same string inside a sentence is ignored. Requiring capitals costs nothing and removes a lot more.
+
+Vanity plates defeat all of that, though, and a tester's photo proved it: `B2TRW` is a real Florida plate and matches nothing structural. So there is a second rule that reads the **line** rather than the characters — drop the words (`FLORIDA`, `TEXAS`, the issuing state), and if exactly one token is left, in capitals and digits with at least one of each, that is a plate. All digits is a quantity, all letters is a word, and that single condition is what keeps `Total 77002 units` and `London SW1A 1AA` out.
 
 Addresses run three patterns rather than one: number-then-street (`1600 Pennsylvania Ave`), keyword-then-number (`House 12`, `Flat 3B`), and postcodes in the two forms distinctive enough to be worth matching. They overlap deliberately — `House 12, Road 5` matches two of them — so a match another longer match already covers is dropped, or the user gets two boxes over nearly the same words.
 
@@ -242,7 +246,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-42 tests, all running **in memory with no emulator**, in about two seconds.
+51 tests, all running **in memory with no emulator**, in about two seconds.
 
 **Unit tests (`test/sensitive_text_test.dart`)** cover the part most likely to be wrong and cheapest to check — the rules. Positive cases for every pattern, plus the negatives that matter:
 
@@ -287,8 +291,9 @@ These are measured, not hypothetical.
 - **Address detection is still rules, not understanding.** It covers number-then-street, keyword-then-number and two postcode forms, which between them reach well beyond the original US-only rule — but it recognises shapes, not places, and an address written in a shape none of the three anticipate is invisible to it.
 - **Phone-number detection is US-centric** and will flag some non-phone digit sequences of the right shape. This is why every finding is labelled *potential* and is reviewable.
 - **English/Latin script only.** The OCR model loaded is the Latin recogniser.
-- **Number plates are read, not seen.** They are found by OCR plus a pattern, not by locating a plate in the image, so a plate has to be legible as text to be found at all — and a format none of the four patterns covers is missed. Non-Latin plates cannot be read at all, which rules out the Bengali and Devanagari plates common in the markets this was tested in.
-- **Objects cannot be detected, only faces, text and codes.** House keys are the case testers asked for: photographing a key can be enough to have one cut. Recognising one needs an object-detection model, and ML Kit's classifies into five coarse categories that do not include keys. Nothing here can find them, so the manual tool is the honest answer.
+- **Number plates are read, not seen.** They are found by OCR plus rules, not by locating a plate in the image, so a plate has to be legible as text to be found at all. A plate too small, too angled or too stylised for the recogniser is invisible to this, and no rule can help. Non-Latin plates cannot be read at all, which rules out Bengali and Devanagari ones.
+- **Secret detection is prefix-based, so a bespoke credential format is missed** unless it is labelled. An internal token that is neither recognisably issued nor written as `SOMETHING_KEY=` will not be found.
+- **Objects cannot be detected, only faces, text and codes.** A physical key, a document held in shot, a name badge — none of these are findable, because recognising them needs an object-detection model and ML Kit's classifies into five coarse categories that cover none of them. The manual tool is the honest answer for anything in this class.
 - **Android only.** iOS builds require macOS and the project has no `ios/` target configured.
 
 ---

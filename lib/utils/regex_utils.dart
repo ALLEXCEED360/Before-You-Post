@@ -108,6 +108,81 @@ final RegExp platePattern = RegExp(
 /// more likely to be an order reference than a car, so it is ignored.
 const double _plateLineDominance = 0.6;
 
+/// Credentials, of the kind that leak in a screenshot of a terminal, an
+/// .env file or a dashboard.
+///
+/// Every branch here is a provider-issued format with a distinctive
+/// prefix, which is what makes them safe to match without a checksum:
+/// nothing else in ordinary text begins "AKIA" and continues for exactly
+/// sixteen more capitals.
+final RegExp secretPattern = RegExp(
+  r"\bAKIA[0-9A-Z]{16}\b" // AWS access key id
+  r"|\bAIza[0-9A-Za-z_\-]{35}\b" // Google API key
+  r"|\bgh[pousr]_[A-Za-z0-9]{36,}\b" // GitHub token
+  r"|\bgithub_pat_[A-Za-z0-9_]{20,}\b"
+  r"|\bxox[baprs]-[A-Za-z0-9\-]{10,}\b" // Slack
+  r"|\b(?:sk|pk|rk)_(?:live|test)_[0-9A-Za-z]{16,}\b" // Stripe
+  r"|\bsk-(?:ant-|proj-)?[A-Za-z0-9_\-]{20,}\b" // OpenAI, Anthropic
+  // A JSON Web Token: three dot-separated base64url segments, the first
+  // of which always begins "eyJ" because it encodes '{"'.
+  r"|\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\b"
+  r"|-----BEGIN [A-Z ]*PRIVATE KEY-----",
+);
+
+/// The other half of the problem: a secret with no recognisable format,
+/// identified by what it is labelled as.
+///
+/// This is the .env and `export` case - "API_KEY=..." - where the value
+/// itself is indistinguishable from noise and only the key name says it
+/// matters. The whole assignment is matched rather than just the value,
+/// because over-hiding is cosmetic and under-hiding is a privacy
+/// failure.
+///
+/// The eight-character floor on the value keeps this off ordinary prose:
+/// "the secret: I told you" has no run long enough to qualify.
+final RegExp secretAssignmentPattern = RegExp(
+  // A lookbehind, not \b. An underscore is a word character, so \b never
+  // fires between "DB_" and "PASSWORD" - which missed every environment
+  // variable, the single most likely place for this to appear.
+  r"(?<![A-Za-z0-9])"
+  r"(?:api[_\-]?key|secret[_\-]?key|client[_\-]?secret|access[_\-]?token"
+  r"|auth[_\-]?token|bearer|secret|token|password|passwd|pwd)\b"
+  r"""\s*[:=]\s*['"]?[^\s'"]{8,}""",
+  caseSensitive: false,
+);
+
+/// A vanity plate has no format at all.
+///
+/// "B2TRW" is a real Florida plate and matches nothing structural, which
+/// is why [platePattern] missed the photo that prompted this. What marks
+/// a plate out is not its shape but its isolation: it is the only code on
+/// a short line, printed beside at most the issuing state's name.
+///
+/// So this reads the line rather than the characters. Drop the words -
+/// FLORIDA, TEXAS, the state or country - and if exactly one token is
+/// left and it looks like a code, that is a plate.
+SensitiveMatch? findVanityPlate(String text) {
+  final tokens = text.trim().split(RegExp(r"\s+"));
+  // More than a few tokens and this is a sentence, not a plate.
+  if (tokens.isEmpty || tokens.length > 3) return null;
+
+  final codes = [
+    for (final token in tokens)
+      if (!RegExp(r"^[A-Za-z]{3,}$").hasMatch(token)) token,
+  ];
+  if (codes.length != 1) return null;
+
+  final code = codes.single;
+  // Capitals and digits only, and it must contain some of each. All
+  // digits is a quantity; all letters is a word. That single rule is
+  // what keeps "Total 77002 units" and "London SW1A 1AA" out.
+  if (!RegExp(r"^[A-Z0-9]{4,8}$").hasMatch(code)) return null;
+  if (!RegExp(r"[A-Z]").hasMatch(code)) return null;
+  if (!RegExp(r"[0-9]").hasMatch(code)) return null;
+
+  return SensitiveMatch(FindingType.licensePlate, code);
+}
+
 String digitsOnly(String value) => value.replaceAll(RegExp(r"[^0-9]"), "");
 
 /// The Luhn checksum (outline section 9).
@@ -145,6 +220,12 @@ bool passesLuhn(String value) {
 /// reports only the email. Acceptable for v1 - the user can still draw a
 /// manual box (outline section 21).
 List<SensitiveMatch> findSensitive(String text) {
+  final secrets = [
+    ..._collect(FindingType.secret, secretPattern, text),
+    ..._collect(FindingType.secret, secretAssignmentPattern, text),
+  ];
+  if (secrets.isNotEmpty) return secrets;
+
   final emails = _collect(FindingType.email, emailPattern, text);
   if (emails.isNotEmpty) return emails;
 
@@ -167,6 +248,9 @@ List<SensitiveMatch> findSensitive(String text) {
         SensitiveMatch(FindingType.licensePlate, match.group(0)!),
   ];
   if (plates.isNotEmpty) return plates;
+
+  final vanity = findVanityPlate(text);
+  if (vanity != null) return [vanity];
 
   return _collectAddresses(text);
 }
