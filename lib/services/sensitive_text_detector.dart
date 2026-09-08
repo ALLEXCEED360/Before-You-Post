@@ -31,8 +31,77 @@ class SensitiveTextDetector {
     }
 
     findings.addAll(_joinSplitCardNumbers(lines, findings.length));
+    findings.addAll(_labelledSecurityCodes(lines, findings.length));
 
     return findings;
+  }
+
+  /// A security code whose label OCR put on a different line.
+  ///
+  /// On a card the label and the digits are set apart, so ML Kit
+  /// routinely returns "CVV" and "123" as two lines - and the same-line
+  /// rule cannot see either half. Pairing them by position is the only
+  /// way to reach them.
+  ///
+  /// The label is load bearing and there is no substitute for it. Three
+  /// digits have no structure: they are a price, a page number, a year,
+  /// a quantity. Nothing distinguishes a security code from any of those
+  /// except the word printed beside it, which is why an unlabelled code
+  /// is out of reach rather than merely difficult.
+  List<PrivacyFinding> _labelledSecurityCodes(
+    List<OcrLine> lines,
+    int startIndex,
+  ) {
+    final labels = [
+      for (final line in lines)
+        if (securityCodeLabelPattern.hasMatch(line.text.trim())) line,
+    ];
+    if (labels.isEmpty) return const [];
+
+    final values = [
+      for (final line in lines)
+        if (securityCodeValuePattern.hasMatch(line.text.trim())) line,
+    ];
+    if (values.isEmpty) return const [];
+
+    final found = <PrivacyFinding>[];
+    final claimed = <OcrLine>{};
+
+    for (final label in labels) {
+      OcrLine? nearest;
+      var nearestDistance = double.infinity;
+
+      for (final value in values) {
+        if (claimed.contains(value)) continue;
+
+        final distance = (value.bounds.center - label.bounds.center).distance;
+        // Within a few line-heights. A label and its code are printed
+        // together; anything further away is a different number that
+        // happens to be three digits long.
+        if (distance > label.bounds.height * 6) continue;
+
+        if (distance < nearestDistance) {
+          nearest = value;
+          nearestDistance = distance;
+        }
+      }
+
+      if (nearest == null) continue;
+      claimed.add(nearest);
+
+      found.add(
+        PrivacyFinding(
+          id: 'cvv_${startIndex + found.length}',
+          type: FindingType.securityCode,
+          // The digits, not the label. Hiding the word "CVV" protects
+          // nothing.
+          bounds: nearest.bounds,
+          detail: nearest.text.trim(),
+        ),
+      );
+    }
+
+    return found;
   }
 
   /// Card numbers printed across several OCR lines.

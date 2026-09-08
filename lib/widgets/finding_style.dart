@@ -19,6 +19,7 @@ IconData iconForFinding(FindingType type) => switch (type) {
   FindingType.email => Icons.alternate_email,
   FindingType.url => Icons.link,
   FindingType.cardNumber => Icons.credit_card,
+  FindingType.securityCode => Icons.password,
   FindingType.address => Icons.home_outlined,
   FindingType.licensePlate => Icons.directions_car_outlined,
   FindingType.secret => Icons.key_outlined,

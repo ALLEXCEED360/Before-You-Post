@@ -151,6 +151,36 @@ final RegExp secretAssignmentPattern = RegExp(
   caseSensitive: false,
 );
 
+/// A card security code, with its label on the same line.
+///
+/// The label is the whole rule. Three digits carry no structure at all -
+/// they are a price, a page number, a quantity, a year - so there is
+/// nothing to match on but the word printed next to them. Without that,
+/// flagging security codes would mean flagging every small number in
+/// every photo.
+final RegExp securityCodePattern = RegExp(
+  r"\b(?:CVV2?|CVC2?|CVN|CID|CSC"
+  r"|security\s*code|card\s*(?:verification|security)\s*(?:code|value|number))"
+  r"\b\s*[:#-]?\s*\d{3,4}\b",
+  caseSensitive: false,
+);
+
+/// The same label, alone on its line.
+///
+/// OCR frequently puts the label and the digits on separate lines,
+/// because on a card they are set apart. [securityCodePattern] cannot
+/// see those; the detector pairs them up by position instead.
+final RegExp securityCodeLabelPattern = RegExp(
+  r"^(?:CVV2?|CVC2?|CVN|CID|CSC"
+  r"|security\s*code|card\s*(?:verification|security)\s*(?:code|value|number))"
+  r"\s*[:#-]?$",
+  caseSensitive: false,
+);
+
+/// A bare three or four digit group - a security code candidate, but
+/// only ever when a label sits next to it.
+final RegExp securityCodeValuePattern = RegExp(r"^\d{3,4}$");
+
 /// A vanity plate has no format at all.
 ///
 /// "B2TRW" is a real Florida plate and matches nothing structural, which
@@ -238,6 +268,9 @@ List<SensitiveMatch> findSensitive(String text) {
         SensitiveMatch(FindingType.cardNumber, match.group(0)!),
   ];
   if (cards.isNotEmpty) return cards;
+
+  final codes = _collect(FindingType.securityCode, securityCodePattern, text);
+  if (codes.isNotEmpty) return codes;
 
   final phones = _collect(FindingType.phoneNumber, phonePattern, text);
   if (phones.isNotEmpty) return phones;

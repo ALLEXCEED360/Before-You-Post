@@ -126,4 +126,55 @@ void main() {
       hasLength(1),
     );
   });
+
+  test('pairs a security code with a label on another line', () {
+    // The reported case. On a card the label and the digits are set
+    // apart, so ML Kit returns them as separate lines and the same-line
+    // rule sees neither half.
+    final findings = detector.detect([
+      OcrLine(
+        text: 'CVV',
+        bounds: const Rect.fromLTWH(0, 100, 60, 24),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: '123',
+        bounds: const Rect.fromLTWH(80, 100, 50, 24),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings.single.type, FindingType.securityCode);
+    // The digits, not the label. Hiding the word "CVV" protects nothing.
+    expect(findings.single.bounds, const Rect.fromLTWH(80, 100, 50, 24));
+  });
+
+  test('does not pair a label with a distant number', () {
+    final findings = detector.detect([
+      OcrLine(
+        text: 'CVV',
+        bounds: const Rect.fromLTWH(0, 100, 60, 24),
+        tokens: const [],
+      ),
+      OcrLine(
+        text: '499',
+        bounds: const Rect.fromLTWH(900, 1400, 50, 24),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings, isEmpty);
+  });
+
+  test('a three digit number with no label anywhere is ignored', () {
+    final findings = detector.detect([
+      OcrLine(
+        text: '123',
+        bounds: const Rect.fromLTWH(0, 100, 50, 24),
+        tokens: const [],
+      ),
+    ]);
+
+    expect(findings, isEmpty);
+  });
 }

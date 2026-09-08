@@ -22,7 +22,7 @@ How it works
 
 1. Choose a photo, or take one.
 2. The app scans it for faces, text, and QR or barcodes.
-3. Text is checked against rules for phone numbers, email addresses, web links, card numbers, addresses, vehicle number plates and API keys.
+3. Text is checked against rules for phone numbers, email addresses, web links, card numbers and security codes, addresses, vehicle number plates and API keys.
 4. You review everything found, and choose what to hide and how.
 5. Tap Protect, and the app produces a new copy with those areas obscured.
 
@@ -36,6 +36,7 @@ What it finds
 • Email addresses
 • Web links
 • Card numbers, validated with a checksum to cut down on false alarms
+• Card security codes, where the card labels them
 • Addresses, including house and flat numbers and postcodes
 • Vehicle number plates
 • API keys, access tokens and other credentials

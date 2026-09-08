@@ -37,7 +37,7 @@ The README says what actually works today rather than what is planned.
 |---|---|
 | Pick a photo from the gallery or camera | ✅ Working |
 | Face detection | ✅ Working |
-| OCR + rule-based detection of phone numbers, emails, URLs, card numbers, addresses, number plates, API keys and secrets | ✅ Working |
+| OCR + rule-based detection of phone numbers, emails, URLs, card numbers, security codes, addresses, number plates, API keys and secrets | ✅ Working |
 | QR and barcode detection, with decoded payload shown | ✅ Working |
 | Review each finding and choose hide / keep | ✅ Working |
 | Choose blur / pixelate / blackout per finding | ✅ Working |
@@ -97,6 +97,8 @@ The Luhn checksum is what makes card detection usable at all. Without it, "any 1
 It also does a second job. ML Kit groups text into lines by proximity, and a card number is the one thing routinely printed with gaps wide enough that the four groups come back as **four separate lines** — at which point every per-line rule sees `1111`, which is not a card number by any measure and not a phone number either. `SensitiveTextDetector` therefore rejoins digit groups that share a row and sit close together, concatenates them left to right, and tests the result with Luhn. It accepts any run of digits rather than groups of exactly four, because the line grouping is inconsistent about where it breaks — the same card comes back as four groups on one photo and two halves of eight on another. Requiring the checksum is what stops that from inventing card numbers out of price columns and spreadsheets: a false join has to pass a one-in-ten filter rather than always succeeding. The union of the group boxes becomes the redaction bounds, because blacking out one quarter of a card number leaves the rest legible.
 
 Detector ordering is load-bearing: a 16-digit card number **also** satisfies the phone-number pattern, so cards are tested first. There is a test pinning that behaviour so a future reorder fails loudly.
+
+Security codes are the opposite case, and the one place where structure runs out entirely. Three digits have no shape: they are a price, a page number, a year, a quantity. Nothing distinguishes a card's security code from any of those except the word printed beside it, so the label **is** the rule — and because a card sets the label apart from the digits, OCR usually returns them as two separate lines. They are paired by position, and the box covers the digits rather than the label, since hiding the word "CVV" protects nothing. An unlabelled code is out of reach rather than merely difficult.
 
 Credentials are the highest-value thing in this list and the easiest to match, because the formats are issued rather than written: nothing in ordinary prose begins `AKIA` and continues for exactly sixteen more capitals. Provider prefixes cover AWS, Google, GitHub, Slack, Stripe, OpenAI and Anthropic keys, plus JWTs and PEM private-key headers. A second rule catches the formatless case — `API_KEY=...` in a screenshot of an `.env` file or a terminal — where the value is indistinguishable from noise and only the label says it matters. That rule uses a **lookbehind rather than ``**, because an underscore is a word character and `` never fires between `DB_` and `PASSWORD`, which silently missed every environment variable. A secret is also the one finding whose matched text is **not** shown in the review list; printing the key on screen would defeat the point of finding it.
 
@@ -248,7 +250,7 @@ Kotlin 2.4.0 incremental compilation fails on some Windows + JDK 25 setups and s
 flutter test
 ```
 
-57 tests, all running **in memory with no emulator**, in about two seconds.
+62 tests, all running **in memory with no emulator**, in about two seconds.
 
 **Detector tests (`test/split_card_test.dart`)** describe ML Kit results by hand. `OcrLine` is plain data, so a result the app cannot easily produce on demand — a card number the recogniser has broken into four lines — can simply be written down, along with the geometry that makes rejoining it correct or wrong.
 
@@ -297,6 +299,7 @@ These are measured, not hypothetical.
 - **English/Latin script only.** The OCR model loaded is the Latin recogniser.
 - **Number plates are read, not seen.** They are found by OCR plus rules, not by locating a plate in the image, so a plate has to be legible as text to be found at all. A plate too small, too angled or too stylised for the recogniser is invisible to this, and no rule can help. Non-Latin plates cannot be read at all, which rules out Bengali and Devanagari ones.
 - **Secret detection is prefix-based, so a bespoke credential format is missed** unless it is labelled. An internal token that is neither recognisably issued nor written as `SOMETHING_KEY=` will not be found.
+- **An unlabelled security code cannot be found.** If the card does not print `CVV` or `CVC` legibly next to the digits, or OCR does not read that word, there is nothing to match on — three digits are indistinguishable from any other three digits. Expiry dates are not detected at all yet, for the same reason.
 - **Objects cannot be detected, only faces, text and codes.** A physical key, a document held in shot, a name badge — none of these are findable, because recognising them needs an object-detection model and ML Kit's classifies into five coarse categories that cover none of them. The manual tool is the honest answer for anything in this class.
 - **Android only.** iOS builds require macOS and the project has no `ios/` target configured.
 

@@ -272,4 +272,30 @@ void main() {
       expect(findSensitive('the secret: I told you'), isEmpty);
     });
   });
+
+  group('card security codes', () {
+    test('detects a labelled code', () {
+      for (final sample in [
+        'CVV 123',
+        'CVC: 4321',
+        'CVV2 999',
+        'Security Code 456',
+        'Card verification value 321',
+      ]) {
+        expect(
+          findSensitive(sample).map((m) => m.type),
+          contains(FindingType.securityCode),
+          reason: 'failed on: $sample',
+        );
+      }
+    });
+
+    test('an unlabelled three digit number is not a security code', () {
+      // The label is the entire rule. Three digits are a price, a page
+      // number, a year or a quantity, and flagging them unlabelled would
+      // mean flagging every small number in every photo.
+      expect(findSensitive('123'), isEmpty);
+      expect(findSensitive('Total 499'), isEmpty);
+    });
+  });
 }

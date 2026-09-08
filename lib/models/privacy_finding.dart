@@ -14,6 +14,7 @@ enum FindingType {
   email('Email address', RedactionMethod.blackout),
   url('Link', RedactionMethod.blackout),
   cardNumber('Card number', RedactionMethod.blackout),
+  securityCode('Security code', RedactionMethod.blackout),
   address('Address', RedactionMethod.blackout),
   licensePlate('Number plate', RedactionMethod.blackout),
   secret('API key or secret', RedactionMethod.blackout),
