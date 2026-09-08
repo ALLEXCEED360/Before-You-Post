@@ -68,73 +68,73 @@ class FindingCard extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md,
-            vertical: 6,
-          ),
+          padding: const EdgeInsets.symmetric(vertical: 6),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  _NumberedThumbnail(
-                    image: image,
-                    bounds: finding.bounds,
-                    number: number,
-                    color: accent,
-                    dimmed: !finding.selected,
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              iconForFinding(finding.type),
-                              size: 15,
-                              color: scheme.onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                finding.type.label,
-                                style: theme.textTheme.titleSmall,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: Row(
+                  children: [
+                    _NumberedThumbnail(
+                      image: image,
+                      bounds: finding.bounds,
+                      number: number,
+                      color: accent,
+                      dimmed: !finding.selected,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                iconForFinding(finding.type),
+                                size: 15,
+                                color: scheme.onSurfaceVariant,
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  finding.type.label,
+                                  style: theme.textTheme.titleSmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (finding.detail != null)
+                            Text(
+                              finding.detail!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
                               ),
                             ),
-                          ],
-                        ),
-                        if (finding.detail != null)
-                          Text(
-                            finding.detail!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  if (onDelete != null)
-                    IconButton(
-                      tooltip: 'Remove this box',
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      onPressed: onDelete,
+                    if (onDelete != null)
+                      IconButton(
+                        tooltip: 'Remove this box',
+                        icon: const Icon(Icons.delete_outline, size: 20),
+                        onPressed: onDelete,
+                      ),
+                    const SizedBox(width: AppSpacing.sm),
+                    // Inside a Semantics wrapper so a screen reader
+                    // announces which finding this switch belongs to,
+                    // rather than several identical unlabelled switches.
+                    Semantics(
+                      label: 'Hide ${finding.type.label} $number',
+                      child: Switch(
+                        value: finding.selected,
+                        onChanged: onSelectedChanged,
+                      ),
                     ),
-                  const SizedBox(width: AppSpacing.sm),
-                  // Inside a Semantics wrapper so a screen reader
-                  // announces which finding this switch belongs to,
-                  // rather than several identical unlabelled switches.
-                  Semantics(
-                    label: 'Hide ${finding.type.label} $number',
-                    child: Switch(
-                      value: finding.selected,
-                      onChanged: onSelectedChanged,
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               // The method picker only exists while this finding is being
               // hidden - showing it for a kept finding would offer a
@@ -147,6 +147,8 @@ class FindingCard extends StatelessWidget {
                 child: finding.selected
                     ? Padding(
                         padding: const EdgeInsets.only(
+                          left: AppSpacing.sm,
+                          right: AppSpacing.sm,
                           top: AppSpacing.xs,
                           bottom: 2,
                         ),
@@ -238,12 +240,22 @@ class _MethodPicker extends StatelessWidget {
     return SegmentedButton<RedactionMethod>(
       showSelectedIcon: false,
       style: const ButtonStyle(
-        visualDensity: VisualDensity.compact,
-        // The default segment padding assumes a short word beside an
-        // icon. Stacked, the word needs that width more than the padding
-        // does.
+        // The default segment height assumes ONE line of content beside
+        // an icon. Stacked, the icon and the word together are taller
+        // than that, so the column was squeezed against the segment
+        // border and the text came out flattened. Asking for the height
+        // explicitly is what fixes it - shrinkWrap first, so the height
+        // below is the real one rather than a floor the tap target then
+        // pads out again.
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        // The segment's height comes from its padding, not from
+        // minimumSize - the natural height already exceeded any sane
+        // floor, so setting one changed nothing. Six pixels above the
+        // icon and below the word left both close enough to the border
+        // to read as touching it, which is what a tester saw. Ten is
+        // what a stacked label needs.
         padding: WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 4),
+          EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 10),
         ),
       ),
       segments: [
@@ -265,7 +277,7 @@ class _MethodPicker extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(iconForMethod(method), size: 18),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   labelForMethod(method),
                   maxLines: 1,
@@ -273,7 +285,9 @@ class _MethodPicker extends StatelessWidget {
                   // font scale degrades to a shortened word instead of
                   // going back to the two-line mess this replaced.
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    letterSpacing: 0.1,
+                  ),
                 ),
               ],
             ),

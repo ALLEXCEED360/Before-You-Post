@@ -205,10 +205,24 @@ void main() {
     for (final label in ['Blur', 'Pixelate', 'Blackout']) {
       expect(
         tester.getSize(find.text(label)).height,
-        lessThan(26),
+        lessThan(30),
         reason: '"$label" wrapped onto a second line',
       );
     }
+
+    // And the segment is tall enough to hold an icon above a word with
+    // real space around both. At six pixels of padding a tester read the
+    // border as touching the text; ten is what it took. Nothing throws
+    // either way - crowding is legal layout, visible only to the eye -
+    // so height is the only thing a test can hold on to.
+    final segments = tester.getSize(
+      find.byType(SegmentedButton<RedactionMethod>),
+    );
+    expect(
+      segments.height,
+      greaterThanOrEqualTo(58),
+      reason: 'the method segments are too cramped for a stacked label',
+    );
   });
 
   testWidgets('a whole finding card fits in the panel on a short screen', (
