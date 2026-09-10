@@ -54,20 +54,16 @@ bool reducedMotion(BuildContext context) =>
 class AppSemantics extends ThemeExtension<AppSemantics> {
   const AppSemantics({
     required this.safe,
-    required this.onSafe,
     required this.risk,
-    required this.onRisk,
     required this.canvas,
     required this.heroGradient,
   });
 
   /// "Nothing to worry about" - protected, complete, on-device.
   final Color safe;
-  final Color onSafe;
 
   /// "Look at this" - a detected privacy risk.
   final Color risk;
-  final Color onRisk;
 
   /// The backdrop behind a photo. Always near-black so the image itself
   /// is the brightest thing on screen, in both themes.
@@ -79,17 +75,13 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
   @override
   AppSemantics copyWith({
     Color? safe,
-    Color? onSafe,
     Color? risk,
-    Color? onRisk,
     Color? canvas,
     List<Color>? heroGradient,
   }) {
     return AppSemantics(
       safe: safe ?? this.safe,
-      onSafe: onSafe ?? this.onSafe,
       risk: risk ?? this.risk,
-      onRisk: onRisk ?? this.onRisk,
       canvas: canvas ?? this.canvas,
       heroGradient: heroGradient ?? this.heroGradient,
     );
@@ -100,9 +92,7 @@ class AppSemantics extends ThemeExtension<AppSemantics> {
     if (other == null) return this;
     return AppSemantics(
       safe: Color.lerp(safe, other.safe, t)!,
-      onSafe: Color.lerp(onSafe, other.onSafe, t)!,
       risk: Color.lerp(risk, other.risk, t)!,
-      onRisk: Color.lerp(onRisk, other.onRisk, t)!,
       canvas: Color.lerp(canvas, other.canvas, t)!,
       heroGradient: [
         for (var i = 0; i < heroGradient.length; i++)
@@ -138,9 +128,7 @@ abstract final class AppTheme {
       // Green shifts lighter in dark mode and darker in light mode so it
       // clears 4.5:1 against its own background in both themes.
       safe: isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D),
-      onSafe: isDark ? const Color(0xFF06251A) : Colors.white,
       risk: isDark ? const Color(0xFFF87171) : const Color(0xFFC62828),
-      onRisk: isDark ? const Color(0xFF2A0A0A) : Colors.white,
       canvas: const Color(0xFF0B1120),
       heroGradient: isDark
           ? const [Color(0xFF111C2E), Color(0xFF0B1120)]

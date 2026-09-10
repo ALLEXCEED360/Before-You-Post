@@ -39,7 +39,6 @@ class PrivacyFinding {
     required this.id,
     required FindingType type,
     required this.bounds,
-    this.confidence = 1.0,
     this.detail,
     this.selected = true,
     RedactionMethod? redaction,
@@ -51,9 +50,6 @@ class PrivacyFinding {
 
   /// Region of the risk, in original image pixels.
   final Rect bounds;
-
-  /// 0.0 - 1.0. Rule-based detectors use 1.0; models report their own.
-  final double confidence;
 
   /// Optional extra context, e.g. the actual matched text.
   final String? detail;
@@ -70,7 +66,6 @@ class PrivacyFinding {
       id: id,
       type: type,
       bounds: bounds,
-      confidence: confidence,
       detail: detail,
       selected: selected ?? this.selected,
       redaction: redaction ?? this.redaction,
